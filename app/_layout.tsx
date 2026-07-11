@@ -1,24 +1,20 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+    <>
+      <Stack
+        screenOptions={{
+          headerBackButtonDisplayMode: 'minimal',
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: '#F5F0E6' },
+        }}>
+        <Stack.Screen name="index" options={{ title: '我的书架', headerLargeTitle: true }} />
+        <Stack.Screen name="book/[id]" options={{ title: '目录', headerLargeTitle: true }} />
+        <Stack.Screen name="reader/[bookId]/[chapterId]" options={{ title: '阅读', headerLargeTitle: false }} />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+      <StatusBar style="dark" />
+    </>
   );
 }
