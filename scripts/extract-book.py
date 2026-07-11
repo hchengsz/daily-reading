@@ -111,7 +111,16 @@ def book_metadata(source: Path) -> dict[str, str]:
 
 def extract_book(source: Path) -> dict:
     document = pymupdf.open(source)
-    pages = [clean_page(page.get_text()) for page in document]
+    cache_dir = ROOT / "data" / "vision-ocr" / book_metadata(source)["id"]
+    pages = []
+    vision_page_count = 0
+    for index, page in enumerate(document):
+        cached_page = cache_dir / f"page-{index + 1:04d}.txt"
+        if cached_page.exists():
+            pages.append(clean_page(cached_page.read_text(encoding="utf-8")))
+            vision_page_count += 1
+        else:
+            pages.append(clean_page(page.get_text()))
     pattern = SECTION_RE if "慕道者" in source.stem else CHAPTER_RE
     hits: list[tuple[int, int, str]] = []
 
@@ -165,6 +174,7 @@ def extract_book(source: Path) -> dict:
         **book_metadata(source),
         "sourceFile": source.name,
         "pageCount": len(pages),
+        "visionOcrPageCount": vision_page_count,
         "chapters": chapters,
     }
 

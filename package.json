@@ -5,6 +5,9 @@
   "scripts": {
     "start": "expo start",
     "start:proxy": "expo start --clear",
+    "ocr:pilot": "python scripts/vision-ocr.py --book catechumen-guide --start-page 6 --max-pages 4 --batch-size 4",
+    "ocr:all": "python scripts/vision-ocr.py --all --batch-size 4 && python scripts/extract-book.py",
+    "books:rebuild": "python scripts/extract-book.py",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
@@ -29,6 +32,7 @@
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.11",
+    "pdf-lib": "^1.17.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
