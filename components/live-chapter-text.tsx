@@ -1,0 +1,131 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+type LiveStatus = 'disabled' | 'loading' | 'ready' | 'failed';
+
+type CorrectedContentResponse = {
+  content?: string;
+  error?: string;
+};
+
+const SCG_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'scg-mysteries']);
+const correctedTextCache = new Map<string, string>();
+
+export function LiveChapterText({
+  bookId,
+  chapterId,
+  content,
+  fontSize,
+}: {
+  bookId: string;
+  chapterId: string;
+  content: string;
+  fontSize: number;
+}) {
+  const cacheKey = `${bookId}:${chapterId}`;
+  const enabled = SCG_BOOK_IDS.has(bookId);
+  const cachedText = correctedTextCache.get(cacheKey);
+  const [displayText, setDisplayText] = useState(cachedText || content);
+  const [status, setStatus] = useState<LiveStatus>(enabled ? (cachedText ? 'ready' : 'loading') : 'disabled');
+  const [message, setMessage] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+  const bodyStyle = useMemo(
+    () => [styles.body, { fontSize, lineHeight: fontSize * 1.9 }],
+    [fontSize],
+  );
+
+  useEffect(() => {
+    setDisplayText(cachedText || content);
+    setStatus(enabled ? (cachedText ? 'ready' : 'loading') : 'disabled');
+    setMessage('');
+  }, [cacheKey, cachedText, content, enabled]);
+
+  useEffect(() => {
+    if (!enabled || cachedText) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    async function loadCorrectedText() {
+      setStatus('loading');
+      setMessage('');
+
+      try {
+        const response = await fetch('/api/chapter-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookId, chapterId }),
+          signal: controller.signal,
+        });
+        const data = await response.json() as CorrectedContentResponse;
+        if (!response.ok || !data.content) {
+          throw new Error(data.error || `实时校正文失败（${response.status}）`);
+        }
+        if (cancelled) return;
+
+        correctedTextCache.set(cacheKey, data.content);
+        setDisplayText(data.content);
+        setStatus('ready');
+      } catch (error) {
+        if (controller.signal.aborted || cancelled) return;
+
+        setDisplayText(content);
+        setStatus('failed');
+        setMessage(error instanceof Error ? error.message : '实时校正文失败');
+      }
+    }
+
+    loadCorrectedText();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [bookId, cacheKey, cachedText, chapterId, content, enabled, retryCount]);
+
+  return (
+    <View style={styles.container}>
+      {enabled && (
+        <View style={[styles.statusBox, status === 'failed' ? styles.statusBoxError : undefined]}>
+          <Text style={styles.statusText}>
+            {status === 'loading' && '正在用 AI 视觉校正文，暂时显示旧 OCR'}
+            {status === 'ready' && '已切换为 AI 视觉校正版'}
+            {status === 'failed' && `AI 视觉校正失败，继续使用旧 OCR${message ? `：${message}` : ''}`}
+          </Text>
+          {status === 'failed' && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setRetryCount((value) => value + 1)}
+              style={styles.retryButton}>
+              <Text style={styles.retryText}>重试</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+      <Text selectable style={bodyStyle}>{displayText}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { gap: 18 },
+  statusBox: {
+    backgroundColor: '#F1E7D9',
+    borderRadius: 14,
+    borderCurve: 'continuous',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  statusBoxError: { backgroundColor: '#F7E6DF' },
+  statusText: { flex: 1, color: '#6C5A49', fontSize: 13, lineHeight: 19 },
+  retryButton: {
+    backgroundColor: '#8B3A2F',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  retryText: { color: '#FFF8EE', fontSize: 12, fontWeight: '700' },
+  body: { color: '#353029', letterSpacing: 0.5 },
+});

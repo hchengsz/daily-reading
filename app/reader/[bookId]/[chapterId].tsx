@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ChapterSummary } from '@/components/chapter-summary';
+import { LiveChapterText } from '@/components/live-chapter-text';
 import { getBook, getChapter } from '@/lib/book';
 
 export default function ReaderScreen() {
@@ -31,7 +32,13 @@ export default function ReaderScreen() {
         <Text selectable style={styles.title}>{chapter.title}</Text>
         <View style={styles.divider} />
         <ChapterSummary key={`${book.id}:${chapter.id}`} bookId={book.id} chapterId={chapter.id} />
-        <Text selectable style={[styles.body, { fontSize, lineHeight: fontSize * 1.9 }]}>{chapter.content}</Text>
+        <LiveChapterText
+          key={`${book.id}:${chapter.id}`}
+          bookId={book.id}
+          chapterId={chapter.id}
+          content={chapter.content}
+          fontSize={fontSize}
+        />
 
         <View style={styles.navigation}>
           {previous ? <ChapterButton bookId={book.id} chapterId={previous.id} label="上一章" title={previous.title} reverse /> : <View style={styles.spacer} />}
@@ -72,7 +79,6 @@ const styles = StyleSheet.create({
   section: { color: '#9A5A4F', fontSize: 12, fontWeight: '700', letterSpacing: 1.2, textAlign: 'center' },
   title: { color: '#25211C', fontSize: 28, lineHeight: 39, fontWeight: '700', textAlign: 'center', paddingTop: 12 },
   divider: { width: 40, height: 2, backgroundColor: '#9B4A3D', alignSelf: 'center', marginVertical: 26 },
-  body: { color: '#353029', letterSpacing: 0.5 },
   navigation: { flexDirection: 'row', gap: 12, paddingTop: 52 },
   chapterButton: { flex: 1, minWidth: 0, backgroundColor: '#EDE3D2', borderRadius: 16, borderCurve: 'continuous', padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
   chapterButtonReverse: { justifyContent: 'flex-start' },

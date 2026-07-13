@@ -106,12 +106,15 @@ def book_metadata(source: Path) -> dict[str, str]:
         return {"id": "scg-mysteries", "title": "驳异大全·论奥理", "author": "圣多玛斯・阿奎纳", "translator": "吕穆迪 译述"}
     if "慕道者" in stem:
         return {"id": "catechumen-guide", "title": "慕道者指南", "author": "李善修", "translator": ""}
+    if "论道成肉身" in stem:
+        return {"id": "on-the-incarnation", "title": "论道成肉身", "author": "阿塔那修", "translator": "石敏敏 译"}
     return {"id": "summa-contra-gentiles", "title": "驳异大全（合集）", "author": "圣多玛斯・阿奎纳", "translator": "吕穆迪 译述"}
 
 
 def extract_book(source: Path) -> dict:
+    metadata = book_metadata(source)
     document = pymupdf.open(source)
-    cache_dir = ROOT / "data" / "vision-ocr" / book_metadata(source)["id"]
+    cache_dir = ROOT / "data" / "vision-ocr" / metadata["id"]
     pages = []
     vision_page_count = 0
     for index, page in enumerate(document):
@@ -121,40 +124,59 @@ def extract_book(source: Path) -> dict:
             vision_page_count += 1
         else:
             pages.append(clean_page(page.get_text()))
-    pattern = SECTION_RE if "慕道者" in source.stem else CHAPTER_RE
-    hits: list[tuple[int, int, str]] = []
+    if metadata["id"] == "on-the-incarnation":
+        starts: list[tuple[int, int | str, str]] = [
+            (0, "前置内容", "封面、版权、目录与总序"),
+            (11, "导言", "中译本导言"),
+            (25, "正文", "驳异教徒"),
+            (95, "正文", "论道成肉身"),
+            (180, "阿里乌争议", "罢黜阿里乌"),
+            (188, "阿里乌争议", "优西比乌书信"),
+            (191, "阿里乌争议", "尼西亚大公会议"),
+            (210, "阿里乌争议", "附注A"),
+            (217, "阿里乌争议", "信仰陈述"),
+            (219, "阿里乌争议", "论《路加福音》十章二十二节"),
+            (234, "阿里乌争议", "致全世界主教的通谕"),
+            (246, "阿里乌争议", "反驳阿里乌主义者的辩护"),
+            (357, "附录", "译名对照表"),
+            (372, "附录", "译后记"),
+        ]
+        starts = [start for start in starts if start[0] < len(pages)]
+    else:
+        pattern = SECTION_RE if "慕道者" in source.stem else CHAPTER_RE
+        hits: list[tuple[int, int, str]] = []
 
-    for page_index, text in enumerate(pages):
-        if len(text) < 300:
-            continue
-        head = "".join(text.splitlines()[:20]).replace(" ", "")
-        match = pattern.search(head)
-        if match:
-            number = chinese_number(match.group(1))
-            if number:
-                hits.append((page_index, number, match.group(0)))
+        for page_index, text in enumerate(pages):
+            if len(text) < 300:
+                continue
+            head = "".join(text.splitlines()[:20]).replace(" ", "")
+            match = pattern.search(head)
+            if match:
+                number = chinese_number(match.group(1))
+                if number:
+                    hits.append((page_index, number, match.group(0)))
 
-    anchor = next((index for index, hit in enumerate(hits) if hit[1] <= 5), 0)
-    starts: list[tuple[int, int, str]] = []
-    group = 1
-    previous = 0
-    for page_index, number, label in hits[anchor:]:
-        if (previous >= 30 or pattern is SECTION_RE) and previous > number and number <= 5:
-            group += 1
-            previous = 0
-        if number <= previous:
-            continue
-        # A large, isolated jump is usually an in-body cross-reference picked up
-        # by OCR, not a real chapter heading. Keep plausible gaps for missed scans.
-        if previous and number - previous > 8:
-            continue
-        starts.append((page_index, group, f"{label} · {chapter_title(pages[page_index], label)}"))
-        previous = number
+        anchor = next((index for index, hit in enumerate(hits) if hit[1] <= 5), 0)
+        starts = []
+        group = 1
+        previous = 0
+        for page_index, number, label in hits[anchor:]:
+            if (previous >= 30 or pattern is SECTION_RE) and previous > number and number <= 5:
+                group += 1
+                previous = 0
+            if number <= previous:
+                continue
+            # A large, isolated jump is usually an in-body cross-reference picked up
+            # by OCR, not a real chapter heading. Keep plausible gaps for missed scans.
+            if previous and number - previous > 8:
+                continue
+            starts.append((page_index, group, f"{label} · {chapter_title(pages[page_index], label)}"))
+            previous = number
 
-    if not starts:
-        starts = [(0, 1, "全文")]
-    elif starts[0][0] > 0:
-        starts.insert(0, (0, 0, "前言与导论"))
+        if not starts:
+            starts = [(0, 1, "全文")]
+        elif starts[0][0] > 0:
+            starts.insert(0, (0, 0, "前言与导论"))
 
     chapters = []
     for index, (start, group, title) in enumerate(starts):
@@ -164,14 +186,14 @@ def extract_book(source: Path) -> dict:
             continue
         chapters.append({
             "id": str(len(chapters) + 1),
-            "section": "前置内容" if group == 0 else f"第{group}篇",
+            "section": group if isinstance(group, str) else ("前置内容" if group == 0 else f"第{group}篇"),
             "title": title,
             "content": content,
             "startPage": start + 1,
         })
 
     return {
-        **book_metadata(source),
+        **metadata,
         "sourceFile": source.name,
         "pageCount": len(pages),
         "visionOcrPageCount": vision_page_count,
