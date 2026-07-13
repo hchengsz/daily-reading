@@ -128,7 +128,7 @@ async function transcribePdfBatch(input: {
       role: 'user',
       parts: [
         {
-          text: `请逐页转写《${input.title}》的正文。PDF包含原书第 ${input.startPage} 到 ${input.endPage} 页。返回JSON，pages数组中每项包含page和text；page必须使用原书页码。`,
+          text: `请逐页转写《${input.title}》的正文。PDF包含原书第 ${input.startPage} 到 ${input.endPage} 页。返回JSON，pages数组中每项包含page和text；page优先使用原书页码，如果无法判断页码就使用PDF内第1页、第2页这样的顺序页码。`,
         },
         {
           inlineData: {
@@ -169,12 +169,29 @@ async function transcribePdfBatch(input: {
   if (!rawText) throw new Error('Gemini 没有返回正文');
 
   const parsed = JSON.parse(rawText) as { pages?: GeminiPage[] };
-  const pages = (parsed.pages || [])
-    .filter((page): page is GeminiPage => (
-      pageNumbers.includes(page.page) && typeof page.text === 'string' && page.text.trim().length > 0
-    ));
+  const pages = normalizeGeminiPages(parsed.pages || [], pageNumbers);
   if (!pages.length) throw new Error('Gemini 返回的页码无效');
   return pages;
+}
+
+function normalizeGeminiPages(pages: GeminiPage[], pageNumbers: number[]) {
+  return pages
+    .map((page, index) => {
+      if (typeof page.text !== 'string' || !page.text.trim()) return null;
+
+      let pageNumber = page.page;
+      if (!pageNumbers.includes(pageNumber)) {
+        const batchPageNumber = Math.trunc(page.page);
+        if (batchPageNumber >= 1 && batchPageNumber <= pageNumbers.length) {
+          pageNumber = pageNumbers[batchPageNumber - 1];
+        } else if (index < pageNumbers.length) {
+          pageNumber = pageNumbers[index];
+        }
+      }
+
+      return { page: pageNumber, text: page.text.trim() };
+    })
+    .filter((page): page is GeminiPage => page !== null && pageNumbers.includes(page.page));
 }
 
 async function requestGemini(apiKey: string, model: string, body: unknown) {
