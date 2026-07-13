@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { getBook, getChapter } from '@/lib/book';
@@ -20,9 +20,15 @@ const SCG_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'sc
 const MAX_CHAPTER_PAGES = 40;
 const BATCH_SIZE = 4;
 
-const contentCache = new Map<string, Promise<string>>();
+const contentCache = new Map<string, Promise<GeneratedContent>>();
+const aiCacheRoot = path.join(process.cwd(), 'data', 'ai-cache');
 const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
+
+type GeneratedContent = {
+  content: string;
+  source: 'cache' | 'gemini-vision';
+};
 
 function getChapterPages(bookId: string, chapterId: string) {
   const book = getBook(bookId);
@@ -43,17 +49,30 @@ function getChapterPages(bookId: string, chapterId: string) {
   return { book, chapter, startPage, endPage };
 }
 
-function getCorrectedContent(bookId: string, chapterId: string) {
+function getCorrectedContent(bookId: string, chapterId: string, force = false) {
   const cacheKey = `${bookId}:${chapterId}`;
+  if (force) contentCache.delete(cacheKey);
   const cached = contentCache.get(cacheKey);
   if (cached) return cached;
 
-  const request = generateCorrectedContent(bookId, chapterId).catch((error) => {
+  const request = getOrGenerateCorrectedContent(bookId, chapterId, force).catch((error) => {
     contentCache.delete(cacheKey);
     throw error;
   });
   contentCache.set(cacheKey, request);
   return request;
+}
+
+async function getOrGenerateCorrectedContent(bookId: string, chapterId: string, force: boolean): Promise<GeneratedContent> {
+  const cacheFile = getCacheFile('ocr', bookId, chapterId);
+  if (!force) {
+    const cached = await readCachedText(cacheFile);
+    if (cached) return { content: cached, source: 'cache' };
+  }
+
+  const content = await generateCorrectedContent(bookId, chapterId);
+  await writeCachedText(cacheFile, content);
+  return { content, source: 'gemini-vision' };
 }
 
 async function generateCorrectedContent(bookId: string, chapterId: string) {
@@ -92,6 +111,29 @@ async function generateCorrectedContent(bookId: string, chapterId: string) {
 
   if (!pageText) throw new Error('Gemini 没有返回可用正文');
   return pageText;
+}
+
+function getCacheFile(kind: 'ocr', bookId: string, chapterId: string) {
+  return path.join(aiCacheRoot, kind, safePathPart(bookId), `${safePathPart(chapterId)}.txt`);
+}
+
+function safePathPart(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+async function readCachedText(filePath: string) {
+  try {
+    const text = await readFile(filePath, 'utf-8');
+    return text.trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
+}
+
+async function writeCachedText(filePath: string, text: string) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text, 'utf-8');
 }
 
 async function extractPdfPages(sourceDocument: PDFDocument, startPage: number, endPage: number) {
@@ -226,16 +268,19 @@ function sleep(ms: number) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { bookId?: unknown; chapterId?: unknown };
+    const body = await request.json() as { bookId?: unknown; chapterId?: unknown; force?: unknown };
     if (typeof body.bookId !== 'string' || typeof body.chapterId !== 'string' || !/^\d+$/.test(body.chapterId)) {
       return Response.json({ error: '章节 ID 无效' }, { status: 400 });
     }
     if (!SCG_BOOK_IDS.has(body.bookId)) {
       return Response.json({ error: '这本书不需要实时校正文' }, { status: 400 });
     }
+    if (!getChapter(body.bookId, body.chapterId)) {
+      return Response.json({ error: '没有找到这一章' }, { status: 404 });
+    }
 
-    const content = await getCorrectedContent(body.bookId, body.chapterId);
-    return Response.json({ content, source: 'gemini-vision' });
+    const result = await getCorrectedContent(body.bookId, body.chapterId, body.force === true);
+    return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : '实时校正文失败';
     return Response.json({ error: message }, { status: 500 });

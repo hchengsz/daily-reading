@@ -6,7 +6,7 @@ const clientCache = new Map<string, string>();
 type SummaryState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'success'; summary: string }
+  | { status: 'success'; summary: string; source?: 'cache' | 'gemini' }
   | { status: 'error'; message: string };
 
 export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterId: string }) {
@@ -14,12 +14,12 @@ export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterI
   const controllerRef = useRef<AbortController | null>(null);
   const [state, setState] = useState<SummaryState>(() => {
     const cached = clientCache.get(cacheKey);
-    return cached ? { status: 'success', summary: cached } : { status: 'idle' };
+    return cached ? { status: 'success', summary: cached, source: 'cache' } : { status: 'idle' };
   });
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  async function generateSummary() {
+  async function generateSummary(force = false) {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -29,15 +29,15 @@ export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterI
       const response = await fetch('/api/chapter-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId, chapterId }),
+        body: JSON.stringify({ bookId, chapterId, force }),
         signal: controller.signal,
       });
-      const data = await response.json() as { summary?: string; error?: string };
+      const data = await response.json() as { summary?: string; source?: 'cache' | 'gemini'; error?: string };
       if (!response.ok || !data.summary) {
         throw new Error(data.error || `请求失败（${response.status}）`);
       }
       clientCache.set(cacheKey, data.summary);
-      setState({ status: 'success', summary: data.summary });
+      setState({ status: 'success', summary: data.summary, source: data.source });
     } catch (error) {
       if (controller.signal.aborted) return;
       setState({ status: 'error', message: error instanceof Error ? error.message : '暂时无法生成总结' });
@@ -57,7 +57,7 @@ export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterI
       {state.status === 'idle' && (
         <View style={styles.idleBox}>
           <Text style={styles.idleText}>AI 总结不会自动运行，生成时会使用一次 Gemini 请求。</Text>
-          <Pressable style={styles.generateButton} onPress={generateSummary}>
+          <Pressable style={styles.generateButton} onPress={() => generateSummary(false)}>
             <Text style={styles.generateText}>生成本章详细总结</Text>
           </Pressable>
         </View>
@@ -68,11 +68,19 @@ export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterI
           <Text style={styles.loadingText}>正在梳理本章内容…</Text>
         </View>
       )}
-      {state.status === 'success' && <Text selectable style={styles.summary}>{state.summary}</Text>}
+      {state.status === 'success' && (
+        <View style={styles.successBox}>
+          <Text selectable style={styles.summary}>{state.summary}</Text>
+          <Text style={styles.cacheHint}>{state.source === 'cache' ? '已从本地缓存读取' : '已生成并保存到本地缓存'}</Text>
+          <Pressable style={styles.secondaryButton} onPress={() => generateSummary(true)}>
+            <Text style={styles.secondaryText}>重新生成（会消耗 token）</Text>
+          </Pressable>
+        </View>
+      )}
       {state.status === 'error' && (
         <View style={styles.errorBox}>
           <Text selectable style={styles.errorText}>{state.message}</Text>
-          <Pressable style={styles.generateButton} onPress={generateSummary}>
+          <Pressable style={styles.generateButton} onPress={() => generateSummary(true)}>
             <Text style={styles.generateText}>重新生成</Text>
           </Pressable>
         </View>
@@ -93,9 +101,13 @@ const styles = StyleSheet.create({
   idleText: { color: '#75695D', fontSize: 13, lineHeight: 20 },
   loading: { minHeight: 90, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: '#75695D', fontSize: 13 },
+  successBox: { gap: 14 },
   summary: { color: '#443C33', fontSize: 16, lineHeight: 29 },
+  cacheHint: { color: '#837568', fontSize: 12 },
   errorBox: { gap: 14 },
   errorText: { color: '#8B3A2F', fontSize: 14, lineHeight: 21 },
   generateButton: { alignSelf: 'flex-start', backgroundColor: '#8B3A2F', borderRadius: 99, paddingHorizontal: 17, paddingVertical: 10 },
   generateText: { color: '#FFF8E8', fontSize: 13, fontWeight: '700' },
+  secondaryButton: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderColor: '#8B3A2F', borderRadius: 99, paddingHorizontal: 15, paddingVertical: 9 },
+  secondaryText: { color: '#8B3A2F', fontSize: 12, fontWeight: '700' },
 });

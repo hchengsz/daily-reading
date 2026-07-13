@@ -39,6 +39,10 @@ yarn-error.*
 
 app-example
 
+# locally generated AI text cache
+data/ai-cache/*
+!data/ai-cache/.gitkeep
+
 # generated native folders
 /ios
 /android

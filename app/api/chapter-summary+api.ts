@@ -1,3 +1,6 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
 import { getChapter } from '@/lib/book';
 import { fetch as serverFetch, ProxyAgent } from 'undici';
 
@@ -6,21 +9,40 @@ type GeminiResponse = {
   error?: { message?: string };
 };
 
-const summaryCache = new Map<string, Promise<string>>();
+const summaryCache = new Map<string, Promise<GeneratedSummary>>();
+const aiCacheRoot = path.join(process.cwd(), 'data', 'ai-cache');
 const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
-function summarizeChapter(bookId: string, chapterId: string) {
+type GeneratedSummary = {
+  summary: string;
+  source: 'cache' | 'gemini';
+};
+
+function summarizeChapter(bookId: string, chapterId: string, force = false) {
   const cacheKey = `${bookId}:${chapterId}`;
+  if (force) summaryCache.delete(cacheKey);
   const cached = summaryCache.get(cacheKey);
   if (cached) return cached;
 
-  const request = generateSummary(bookId, chapterId).catch((error) => {
+  const request = getOrGenerateSummary(bookId, chapterId, force).catch((error) => {
     summaryCache.delete(cacheKey);
     throw error;
   });
   summaryCache.set(cacheKey, request);
   return request;
+}
+
+async function getOrGenerateSummary(bookId: string, chapterId: string, force: boolean): Promise<GeneratedSummary> {
+  const cacheFile = getCacheFile('summaries', bookId, chapterId);
+  if (!force) {
+    const cached = await readCachedText(cacheFile);
+    if (cached) return { summary: cached, source: 'cache' };
+  }
+
+  const summary = await generateSummary(bookId, chapterId);
+  await writeCachedText(cacheFile, summary);
+  return { summary, source: 'gemini' };
 }
 
 async function generateSummary(bookId: string, chapterId: string) {
@@ -74,14 +96,40 @@ async function generateSummary(bookId: string, chapterId: string) {
   return summary;
 }
 
+function getCacheFile(kind: 'summaries', bookId: string, chapterId: string) {
+  return path.join(aiCacheRoot, kind, safePathPart(bookId), `${safePathPart(chapterId)}.txt`);
+}
+
+function safePathPart(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+async function readCachedText(filePath: string) {
+  try {
+    const text = await readFile(filePath, 'utf-8');
+    return text.trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw error;
+  }
+}
+
+async function writeCachedText(filePath: string, text: string) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text, 'utf-8');
+}
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { bookId?: unknown; chapterId?: unknown };
+    const body = await request.json() as { bookId?: unknown; chapterId?: unknown; force?: unknown };
     if (typeof body.bookId !== 'string' || typeof body.chapterId !== 'string' || !/^\d+$/.test(body.chapterId)) {
       return Response.json({ error: '章节 ID 无效' }, { status: 400 });
     }
-    const summary = await summarizeChapter(body.bookId, body.chapterId);
-    return Response.json({ summary });
+    if (!getChapter(body.bookId, body.chapterId)) {
+      return Response.json({ error: '没有找到这一章' }, { status: 404 });
+    }
+    const result = await summarizeChapter(body.bookId, body.chapterId, body.force === true);
+    return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : '生成总结失败';
     return Response.json({ error: message }, { status: 500 });
