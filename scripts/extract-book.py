@@ -108,6 +108,8 @@ def book_metadata(source: Path) -> dict[str, str]:
         return {"id": "catechumen-guide", "title": "慕道者指南", "author": "李善修", "translator": ""}
     if "论道成肉身" in stem:
         return {"id": "on-the-incarnation", "title": "论道成肉身", "author": "阿塔那修", "translator": "石敏敏 译"}
+    if "基督大能两千年" in stem:
+        return {"id": "christs-power-middle-ages", "title": "基督大能两千年·中世纪", "author": "尼克・尼德姆", "translator": "路丹 译；贾少彬 校"}
     return {"id": "summa-contra-gentiles", "title": "驳异大全（合集）", "author": "圣多玛斯・阿奎纳", "translator": "吕穆迪 译述"}
 
 
@@ -140,6 +142,25 @@ def extract_book(source: Path) -> dict:
             (246, "阿里乌争议", "反驳阿里乌主义者的辩护"),
             (357, "附录", "译名对照表"),
             (372, "附录", "译后记"),
+        ]
+        starts = [start for start in starts if start[0] < len(pages)]
+    elif metadata["id"] == "christs-power-middle-ages":
+        starts = [
+            (0, "前置内容", "封面、版权、目录与献辞"),
+            (9, "前置内容", "致谢"),
+            (11, "前置内容", "前言"),
+            (21, "中世纪", "1. 伊斯兰教与教会"),
+            (77, "中世纪", "2. 查理曼与神圣罗马帝国"),
+            (145, "中世纪", "3. 拜占庭帝国：从伊苏利亚的利奥到东西教会大分裂"),
+            (237, "中世纪", "4. 克吕尼改革、希尔德布兰与授职权之争"),
+            (305, "中世纪", "5. 十字军东征"),
+            (357, "中世纪", "6. 神圣的俄罗斯：斯拉夫人的正教信仰"),
+            (399, "中世纪", "7. 大学与经院神学的兴起"),
+            (493, "中世纪", "8. 英诺森三世的时代"),
+            (553, "中世纪", "9. 拜占庭帝国：从十字军东征到君士坦丁堡的陷落"),
+            (611, "中世纪", "10. 天主教会的危机：从教廷被囚阿维尼翁到胡斯派"),
+            (677, "附录", "词汇表"),
+            (717, "附录", "地图"),
         ]
         starts = [start for start in starts if start[0] < len(pages)]
     else:

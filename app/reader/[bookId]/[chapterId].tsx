@@ -31,9 +31,9 @@ export default function ReaderScreen() {
         <Text style={styles.section}>{book.title} · {chapter.section} · PDF 第 {chapter.startPage} 页</Text>
         <Text selectable style={styles.title}>{chapter.title}</Text>
         <View style={styles.divider} />
-        <ChapterSummary key={`${book.id}:${chapter.id}`} bookId={book.id} chapterId={chapter.id} />
+        <ChapterSummary key={`summary:${book.id}:${chapter.id}`} bookId={book.id} chapterId={chapter.id} />
         <LiveChapterText
-          key={`${book.id}:${chapter.id}`}
+          key={`content:${book.id}:${chapter.id}`}
           bookId={book.id}
           chapterId={chapter.id}
           content={chapter.content}

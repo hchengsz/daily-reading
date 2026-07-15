@@ -35,6 +35,10 @@ export function LiveChapterText({
     () => [styles.body, { fontSize, lineHeight: fontSize * 1.9 }],
     [fontSize],
   );
+  const textBlocks = useMemo(
+    () => displayText.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean),
+    [displayText],
+  );
 
   useEffect(() => {
     setDisplayText(cachedText || content);
@@ -113,7 +117,13 @@ export function LiveChapterText({
           )}
         </View>
       )}
-      <Text selectable style={bodyStyle}>{displayText}</Text>
+      <View style={styles.textFlow}>
+        {textBlocks.map((block, index) => (
+          <Text key={`${index}:${block.slice(0, 16)}`} selectable style={bodyStyle}>
+            {block}
+          </Text>
+        ))}
+      </View>
     </View>
   );
 }
@@ -139,5 +149,6 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   retryText: { color: '#FFF8EE', fontSize: 12, fontWeight: '700' },
+  textFlow: { gap: 18 },
   body: { color: '#353029', letterSpacing: 0.5 },
 });
