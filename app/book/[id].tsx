@@ -1,13 +1,15 @@
 import { Link, Stack, useLocalSearchParams } from 'expo-router';
 import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 
-import { Chapter, getBook } from '@/lib/book';
+import { Chapter, getBookFrom } from '@/lib/book';
+import { useLibrary } from '@/lib/use-library';
 
 export default function BookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const book = getBook(id);
+  const { library, loading } = useLibrary();
+  const book = getBookFrom(library, id);
   if (!book) {
-    return <View style={styles.errorBox}><Text style={styles.errorText}>没有找到这本书。</Text></View>;
+    return <View style={styles.errorBox}><Text style={styles.errorText}>{loading ? '正在读取目录…' : '没有找到这本书。'}</Text></View>;
   }
   const grouped = book.chapters.reduce<{ title: string; data: Chapter[] }[]>((sections, chapter) => {
     const last = sections[sections.length - 1];

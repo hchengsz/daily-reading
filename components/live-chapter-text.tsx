@@ -9,7 +9,7 @@ type CorrectedContentResponse = {
   error?: string;
 };
 
-const SCG_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'scg-mysteries']);
+const SCG_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'scg-mysteries', 'city-of-god']);
 const correctedTextCache = new Map<string, string>();
 
 export function LiveChapterText({
@@ -17,14 +17,16 @@ export function LiveChapterText({
   chapterId,
   content,
   fontSize,
+  aiOcrEnabled,
 }: {
   bookId: string;
   chapterId: string;
   content: string;
   fontSize: number;
+  aiOcrEnabled?: boolean;
 }) {
   const cacheKey = `${bookId}:${chapterId}`;
-  const enabled = SCG_BOOK_IDS.has(bookId);
+  const enabled = aiOcrEnabled ?? SCG_BOOK_IDS.has(bookId);
   const cachedText = correctedTextCache.get(cacheKey);
   const [displayText, setDisplayText] = useState(cachedText || content);
   const [status, setStatus] = useState<LiveStatus>(enabled ? (cachedText ? 'ready' : 'idle') : 'disabled');

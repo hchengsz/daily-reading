@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { getChapter } from '@/lib/book';
+import { getServerChapter, readLibrary } from '@/lib/server-library';
 import { fetch as serverFetch, ProxyAgent } from 'undici';
 
 type GeminiResponse = {
@@ -48,7 +48,8 @@ async function getOrGenerateSummary(bookId: string, chapterId: string, force: bo
 async function generateSummary(bookId: string, chapterId: string) {
   const apiKey = process.env.GEMINI_API_KEY;
   const configuredModel = process.env.GEMINI_VOCAB_MODEL;
-  const chapter = getChapter(bookId, chapterId);
+  const library = await readLibrary();
+  const chapter = getServerChapter(library, bookId, chapterId);
 
   if (!apiKey) throw new Error('服务端缺少 GEMINI_API_KEY');
   if (!configuredModel) throw new Error('服务端缺少 GEMINI_VOCAB_MODEL');
@@ -125,7 +126,8 @@ export async function POST(request: Request) {
     if (typeof body.bookId !== 'string' || typeof body.chapterId !== 'string' || !/^\d+$/.test(body.chapterId)) {
       return Response.json({ error: '章节 ID 无效' }, { status: 400 });
     }
-    if (!getChapter(body.bookId, body.chapterId)) {
+    const library = await readLibrary();
+    if (!getServerChapter(library, body.bookId, body.chapterId)) {
       return Response.json({ error: '没有找到这一章' }, { status: 404 });
     }
     const result = await summarizeChapter(body.bookId, body.chapterId, body.force === true);

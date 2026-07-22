@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { getBook, getChapter } from '@/lib/book';
+import { getServerBook, getServerChapter, readLibrary } from '@/lib/server-library';
 import { PDFDocument } from 'pdf-lib';
 import { fetch as serverFetch, ProxyAgent } from 'undici';
 
@@ -16,7 +16,7 @@ type GeminiPage = {
   text: string;
 };
 
-const SCG_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'scg-mysteries']);
+const SCG_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'scg-mysteries', 'city-of-god']);
 const MAX_CHAPTER_PAGES = 40;
 const BATCH_SIZE = 4;
 
@@ -30,9 +30,9 @@ type GeneratedContent = {
   source: 'cache' | 'gemini-vision';
 };
 
-function getChapterPages(bookId: string, chapterId: string) {
-  const book = getBook(bookId);
-  const chapter = getChapter(bookId, chapterId);
+function getChapterPagesFromLibrary(library: Awaited<ReturnType<typeof readLibrary>>, bookId: string, chapterId: string) {
+  const book = getServerBook(library, bookId);
+  const chapter = getServerChapter(library, bookId, chapterId);
   if (!book || !chapter) throw new Error('没有找到这一章');
 
   const index = book.chapters.findIndex((item) => item.id === chapterId);
@@ -76,14 +76,16 @@ async function getOrGenerateCorrectedContent(bookId: string, chapterId: string, 
 }
 
 async function generateCorrectedContent(bookId: string, chapterId: string) {
-  if (!SCG_BOOK_IDS.has(bookId)) throw new Error('这本书不需要实时校正文');
-
   const apiKey = process.env.GEMINI_API_KEY;
   const configuredModel = process.env.GEMINI_VOCAB_MODEL;
   if (!apiKey) throw new Error('服务端缺少 GEMINI_API_KEY');
   if (!configuredModel) throw new Error('服务端缺少 GEMINI_VOCAB_MODEL');
 
-  const { book, chapter, startPage, endPage } = getChapterPages(bookId, chapterId);
+  const library = await readLibrary();
+  const bookRecord = getServerBook(library, bookId);
+  if (!bookRecord || !isAiOcrEnabled(bookRecord)) throw new Error('这本书不需要实时校正文');
+
+  const { book, chapter, startPage, endPage } = getChapterPagesFromLibrary(library, bookId, chapterId);
   const pdfPath = path.join(process.cwd(), 'books', book.sourceFile);
   const sourceBytes = await readFile(pdfPath);
   const sourceDocument = await PDFDocument.load(sourceBytes);
@@ -272,10 +274,12 @@ export async function POST(request: Request) {
     if (typeof body.bookId !== 'string' || typeof body.chapterId !== 'string' || !/^\d+$/.test(body.chapterId)) {
       return Response.json({ error: '章节 ID 无效' }, { status: 400 });
     }
-    if (!SCG_BOOK_IDS.has(body.bookId)) {
+    const library = await readLibrary();
+    const book = getServerBook(library, body.bookId);
+    if (!book || !isAiOcrEnabled(book)) {
       return Response.json({ error: '这本书不需要实时校正文' }, { status: 400 });
     }
-    if (!getChapter(body.bookId, body.chapterId)) {
+    if (!getServerChapter(library, body.bookId, body.chapterId)) {
       return Response.json({ error: '没有找到这一章' }, { status: 404 });
     }
 
@@ -285,4 +289,8 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : '实时校正文失败';
     return Response.json({ error: message }, { status: 500 });
   }
+}
+
+function isAiOcrEnabled(book: { id: string; processingMode?: string }) {
+  return book.processingMode === 'scg' || SCG_BOOK_IDS.has(book.id);
 }

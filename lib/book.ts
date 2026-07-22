@@ -15,15 +15,31 @@ export type Book = {
   translator: string;
   sourceFile: string;
   pageCount: number;
+  processingMode?: 'scg' | 'generic';
+  visionOcrPageCount?: number;
   chapters: Chapter[];
 };
 
 export const books = rawLibrary.books as Book[];
 
+export type Library = {
+  books: Book[];
+};
+
+export const fallbackLibrary = rawLibrary as Library;
+
+export function getBookFrom(library: Library, id: string) {
+  return library.books.find((book) => book.id === id);
+}
+
+export function getChapterFrom(library: Library, bookId: string, chapterId: string) {
+  return getBookFrom(library, bookId)?.chapters.find((chapter) => chapter.id === chapterId);
+}
+
 export function getBook(id: string) {
-  return books.find((book) => book.id === id);
+  return getBookFrom(fallbackLibrary, id);
 }
 
 export function getChapter(bookId: string, chapterId: string) {
-  return getBook(bookId)?.chapters.find((chapter) => chapter.id === chapterId);
+  return getChapterFrom(fallbackLibrary, bookId, chapterId);
 }

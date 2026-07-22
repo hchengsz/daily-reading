@@ -2,14 +2,15 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { books } from '@/lib/book';
 import { hideBook, restoreAllBooks, useHiddenBooks } from '@/lib/library-storage';
+import { useLibrary } from '@/lib/use-library';
 
 const coverColors = ['#8B3A2F', '#315C56', '#6A4B73', '#7A5A31', '#3D5875', '#73524A'];
 
 export default function LibraryScreen() {
+  const { library, loading, error } = useLibrary();
   const hiddenBookIds = useHiddenBooks();
-  const visibleBooks = books.filter((book) => !hiddenBookIds.includes(book.id));
+  const visibleBooks = library.books.filter((book) => !hiddenBookIds.includes(book.id));
 
   function confirmDelete(bookId: string, title: string) {
     Alert.alert(
@@ -26,6 +27,15 @@ export default function LibraryScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <Text style={styles.eyebrow}>我的藏书</Text>
       <Text style={styles.heading}>安静地读一会儿</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push('/add-book' as never)}
+        style={({ pressed }) => StyleSheet.flatten([styles.addButton, pressed ? styles.addButtonPressed : undefined])}>
+        <Image source="sf:plus" style={styles.addIcon} tintColor="#F9F4E8" />
+        <Text style={styles.addText}>添加图书</Text>
+      </Pressable>
+      {loading && <Text style={styles.statusText}>正在读取最新书库…</Text>}
+      {error && <Text style={styles.statusText}>使用本地书库：{error}</Text>}
 
       {visibleBooks.map((book, index) => (
         <View key={book.id} style={styles.card}>
@@ -67,7 +77,7 @@ export default function LibraryScreen() {
 
       <View style={styles.note}>
         <Text style={styles.noteTitle}>离线可读</Text>
-        <Text style={styles.noteText}>正文已从 books 中的 PDF 提取并随应用打包，无需联网。</Text>
+        <Text style={styles.noteText}>你可以从手机选择 PDF 添加到本地书库；AI 总结和 OCR 校正文会继续保存到本地缓存。</Text>
         {hiddenBookIds.length > 0 && (
           <Pressable onPress={restoreAllBooks} style={styles.restoreButton}>
             <Text style={styles.restoreText}>恢复已删除书籍（{hiddenBookIds.length}）</Text>
@@ -82,6 +92,11 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 48, gap: 16 },
   eyebrow: { color: '#8B3A2F', fontSize: 13, fontWeight: '700', letterSpacing: 2 },
   heading: { color: '#25221D', fontSize: 30, fontWeight: '700', marginBottom: 8 },
+  addButton: { backgroundColor: '#8B3A2F', borderRadius: 999, borderCurve: 'continuous', paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  addButtonPressed: { opacity: 0.78 },
+  addIcon: { width: 16, height: 16 },
+  addText: { color: '#F9F4E8', fontSize: 15, fontWeight: '700' },
+  statusText: { color: '#7A6D5D', fontSize: 13, lineHeight: 19 },
   card: { backgroundColor: '#FFFCF6', borderRadius: 24, borderCurve: 'continuous', boxShadow: '0 8px 24px rgba(70,50,30,0.12)', overflow: 'hidden' },
   bookContent: { padding: 18, flexDirection: 'row', gap: 18 },
   bookPressed: { padding: 18, flexDirection: 'row', gap: 18, opacity: 0.78 },

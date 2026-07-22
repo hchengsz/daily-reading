@@ -5,24 +5,29 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ChapterSummary } from '@/components/chapter-summary';
 import { LiveChapterText } from '@/components/live-chapter-text';
-import { getBook, getChapter } from '@/lib/book';
+import { getBookFrom, getChapterFrom } from '@/lib/book';
+import { useLibrary } from '@/lib/use-library';
+
+const BUILT_IN_AI_OCR_BOOK_IDS = new Set(['scg-truth', 'scg-creation', 'scg-providence', 'scg-mysteries', 'city-of-god']);
 
 export default function ReaderScreen() {
   const { bookId, chapterId } = useLocalSearchParams<{ bookId: string; chapterId: string }>();
   const [fontSize, setFontSize] = useState(19);
-  const book = getBook(bookId);
-  const chapter = getChapter(bookId, chapterId);
+  const { library, loading } = useLibrary();
+  const book = getBookFrom(library, bookId);
+  const chapter = getChapterFrom(library, bookId, chapterId);
   const index = useMemo(
     () => book?.chapters.findIndex((item) => item.id === chapterId) ?? -1,
     [book, chapterId],
   );
 
   if (!book || !chapter) {
-    return <ScrollView contentInsetAdjustmentBehavior="automatic"><Text style={styles.error}>没有找到这一章。</Text></ScrollView>;
+    return <ScrollView contentInsetAdjustmentBehavior="automatic"><Text style={styles.error}>{loading ? '正在读取正文…' : '没有找到这一章。'}</Text></ScrollView>;
   }
 
   const previous = book.chapters[index - 1];
   const next = book.chapters[index + 1];
+  const aiOcrEnabled = book.processingMode === 'scg' || BUILT_IN_AI_OCR_BOOK_IDS.has(book.id);
 
   return (
     <>
@@ -38,6 +43,7 @@ export default function ReaderScreen() {
           chapterId={chapter.id}
           content={chapter.content}
           fontSize={fontSize}
+          aiOcrEnabled={aiOcrEnabled}
         />
 
         <View style={styles.navigation}>

@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
-import pymupdf
-
-
 ROOT = Path(__file__).resolve().parents[1]
+LOCAL_PYTHON_PACKAGES = ROOT / ".python-packages"
+if LOCAL_PYTHON_PACKAGES.exists():
+    sys.path.insert(0, str(LOCAL_PYTHON_PACKAGES))
+
+try:
+    import pymupdf
+except ModuleNotFoundError:
+    pymupdf = None
+
+try:
+    from pypdf import PdfReader
+except ModuleNotFoundError:
+    PdfReader = None
+
 OUTPUT = ROOT / "data" / "library.json"
 
 CHAPTER_RE = re.compile(r"第([一二三四五六七八九十百零〇○0-9]+)章")
@@ -110,22 +122,42 @@ def book_metadata(source: Path) -> dict[str, str]:
         return {"id": "on-the-incarnation", "title": "论道成肉身", "author": "阿塔那修", "translator": "石敏敏 译"}
     if "基督大能两千年" in stem:
         return {"id": "christs-power-middle-ages", "title": "基督大能两千年·中世纪", "author": "尼克・尼德姆", "translator": "路丹 译；贾少彬 校"}
+    if "天主之城" in stem:
+        return {"id": "city-of-god", "title": "天主之城", "author": "圣奥古斯丁", "translator": ""}
     return {"id": "summa-contra-gentiles", "title": "驳异大全（合集）", "author": "圣多玛斯・阿奎纳", "translator": "吕穆迪 译述"}
+
+
+def read_pdf_pages(source: Path, prefer_pypdf: bool = False) -> list[str]:
+    if prefer_pypdf:
+        if PdfReader is None:
+            raise RuntimeError("《天主之城》需要 pypdf 提取文字：python -m pip install pypdf")
+        reader = PdfReader(source)
+        return [page.extract_text() or "" for page in reader.pages]
+
+    if pymupdf is not None:
+        document = pymupdf.open(source)
+        return [page.get_text() for page in document]
+
+    if PdfReader is not None:
+        reader = PdfReader(source)
+        return [page.extract_text() or "" for page in reader.pages]
+
+    raise RuntimeError("需要安装 PyMuPDF 或 pypdf 才能提取 PDF 文字")
 
 
 def extract_book(source: Path) -> dict:
     metadata = book_metadata(source)
-    document = pymupdf.open(source)
+    raw_pages = read_pdf_pages(source, prefer_pypdf=metadata["id"] == "city-of-god")
     cache_dir = ROOT / "data" / "vision-ocr" / metadata["id"]
     pages = []
     vision_page_count = 0
-    for index, page in enumerate(document):
+    for index, page_text in enumerate(raw_pages):
         cached_page = cache_dir / f"page-{index + 1:04d}.txt"
         if cached_page.exists():
             pages.append(clean_page(cached_page.read_text(encoding="utf-8")))
             vision_page_count += 1
         else:
-            pages.append(clean_page(page.get_text()))
+            pages.append(clean_page(page_text))
     if metadata["id"] == "on-the-incarnation":
         starts: list[tuple[int, int | str, str]] = [
             (0, "前置内容", "封面、版权、目录与总序"),
@@ -163,6 +195,48 @@ def extract_book(source: Path) -> dict:
             (717, "附录", "地图"),
         ]
         starts = [start for start in starts if start[0] < len(pages)]
+    elif metadata["id"] == "city-of-god":
+        outline_starts = [
+            (0, "前置内容"),
+            (10, "第一卷"),
+            (49, "第二卷"),
+            (84, "第三卷"),
+            (125, "第四卷"),
+            (164, "第五卷"),
+            (205, "第六卷"),
+            (228, "第七卷"),
+            (265, "第八卷"),
+            (303, "第九卷"),
+            (329, "第十卷"),
+            (376, "第十一卷"),
+            (416, "第十二卷"),
+            (450, "第十三卷"),
+            (483, "第十四卷"),
+            (526, "第十五卷"),
+            (573, "第十六卷"),
+            (634, "第十七卷"),
+            (683, "第十八卷"),
+            (760, "第十九卷"),
+            (805, "第二十卷"),
+            (868, "第二十一卷"),
+            (918, "第二十二卷"),
+            (978, "附录"),
+            (991, "附录"),
+            (994, "勘误表"),
+        ]
+        starts = []
+        chunk_size = 10
+        for index, (start, section) in enumerate(outline_starts):
+            if start >= len(pages):
+                continue
+            end = outline_starts[index + 1][0] if index + 1 < len(outline_starts) else len(pages)
+            if section == "前置内容":
+                starts.append((start, section, "封面、译者序、作者序与目录"))
+                continue
+            for chunk_start in range(start, min(end, len(pages)), chunk_size):
+                part = ((chunk_start - start) // chunk_size) + 1
+                title = section if end - start <= chunk_size else f"{section} · 第{part}段"
+                starts.append((chunk_start, section, title))
     else:
         pattern = SECTION_RE if "慕道者" in source.stem else CHAPTER_RE
         hits: list[tuple[int, int, str]] = []
