@@ -1,111 +1,112 @@
 # Daily Reading
 
-Daily Reading is a local reading app built with Expo and React Native. Its purpose is simple: take PDF books from the local `books/` folder, extract their text into mobile-friendly reading sections, and optionally provide AI-generated chapter summaries and AI vision OCR correction for difficult scanned books.
+Daily Reading is a personal reading app for turning local PDF books into a comfortable mobile reading experience. It is built with Expo, React Native, and Expo Router, with extra tooling for older scanned books whose OCR text is often messy.
 
-The project is especially optimized for older Chinese theological, philosophical, and church-history PDFs whose OCR quality can be uneven, such as *Summa Contra Gentiles* in Chinese translation.
+The app started as a reader for theological and philosophical classics, especially long Chinese-language PDFs such as *Summa Contra Gentiles*, *The City of God*, and church history texts. It now supports importing new PDFs directly from the app, choosing how they should be processed, and using Gemini to generate reading aids when needed.
 
-## Features
+## What the app does
 
-### 1. Local Library
+Daily Reading is designed around a simple workflow:
 
-- The home screen displays all books in the current library.
-- Each book card shows the title, author, section count, and PDF page count.
-- Users can hide books from the shelf and restore hidden books later.
-- Library data is stored in `data/library.json`.
-- At runtime, the app can also fetch the latest library through the local API route.
+1. Store PDF books locally.
+2. Extract their text into readable sections.
+3. Present those sections in a clean mobile reader.
+4. Let the reader ask AI for summaries or OCR correction only when they want it.
+5. Cache AI output locally so the same chapter does not have to be regenerated again and again.
 
-### 2. Chapter-Based Reading
+It is not a cloud bookshelf or a multi-user library system. Everything is local to the project folder: PDFs, extracted text, generated summaries, and OCR corrections.
 
-- PDF text is extracted and converted into mobile-friendly reading sections.
-- The reader screen supports:
-  - Chapter or section title
-  - Current book section
-  - Original PDF start page
-  - Previous / next navigation
-  - Font size controls
-  - Paragraph-based text rendering to avoid iOS issues with extremely long `<Text>` blocks
+## Main features
 
-### 3. AI Chapter Summaries
+### Local bookshelf
 
-Each chapter has an AI summary panel at the top.
+The home screen shows the current library as a set of book cards. Each card includes the book title, author, number of reading sections, and total PDF page count.
 
-- AI summaries do not run automatically, which prevents accidental token usage.
-- The user must click the summary button manually.
-- Generated summaries are saved locally:
+Books can be hidden from the shelf without deleting the underlying PDF or extracted data. Hidden books can be restored later.
+
+### Mobile-first reading
+
+The reader screen is built for long-form reading on a phone:
+
+- readable chapter layout
+- previous and next section navigation
+- adjustable font size
+- PDF start-page metadata
+- paragraph-based text rendering for long chapters
+
+The paragraph rendering matters. React Native on iOS can become unstable when a very large chapter is rendered as one giant `<Text>` node. Daily Reading splits text into smaller blocks so long chapters remain readable.
+
+### AI chapter summaries
+
+Each reading section can have an AI-generated summary.
+
+AI summaries are intentionally manual. Opening a chapter does not call Gemini automatically. The reader chooses when to generate a summary, which prevents accidental token usage.
+
+Generated summaries are saved here:
 
 ```text
 data/ai-cache/summaries/<bookId>/<chapterId>.txt
 ```
 
-- If the user is not satisfied, they can regenerate the summary.
-- Regeneration calls Gemini again and updates the local cache.
+If a cached summary exists, the app reuses it. If the reader wants a better result, they can regenerate it.
 
-### 4. AI Vision OCR Correction
+### AI vision OCR correction
 
-Some books have poor built-in OCR and support manual AI vision correction.
+Some scanned books have poor embedded OCR. For those books, the app can send the relevant PDF pages to Gemini and ask it to transcribe the page images more carefully.
 
-Currently supported:
+This feature is also manual. The reader has to press the correction button; the app does not run vision OCR automatically.
 
-- The four *Summa Contra Gentiles* volumes
-- *The City of God*
-- User-added books that are imported with “Summa Contra Gentiles mode”
-
-Behavior:
-
-- AI OCR does not run automatically.
-- The user must manually click the AI correction button.
-- If a cached correction exists, the app uses the cached text first.
-- Corrected OCR text is saved to:
+Corrected text is saved here:
 
 ```text
 data/ai-cache/ocr/<bookId>/<chapterId>.txt
 ```
 
-- If AI correction fails, the app keeps showing the original OCR text.
+If correction fails, the original extracted OCR text remains available.
 
-### 5. User-Added Books
+### Add books from the app
 
-The library home screen includes an “Add Book” entry.
+The app includes an Add Book screen. A user can pick a PDF, enter basic metadata, and choose a processing mode.
 
-Users can:
+The imported PDF is copied into:
 
-1. Pick a PDF from the device or computer.
-2. Enter title, author, and translator.
-3. Choose a processing mode:
-   - “Summa Contra Gentiles mode”
-   - “Generic PDF mode”
-4. Save the PDF into `books/`.
-5. Write the new book record into `data/library.json`.
+```text
+books/
+```
 
-#### Summa Contra Gentiles Mode
+The extracted book record is written into:
 
-This mode is intended for older scanned books, especially when:
+```text
+data/library.json
+```
 
-- OCR has frequent errors
-- Chapters are marked with regular numbered chapter headings
-- The book may benefit from AI vision OCR correction
+The bookshelf reads the latest library through a local API route, so newly imported books can appear without manually editing code.
 
-Processing behavior:
+## PDF processing modes
 
-- The importer tries to detect chapter headings near the beginning of each page.
-- It generates chapter-like reading nodes.
-- It enables manual AI OCR correction for the imported book.
+When adding a book, the user chooses one of two modes.
 
-#### Generic PDF Mode
+### Summa Contra Gentiles mode
 
-This mode is intended for regular PDFs or books with a cleaner structure.
+Use this for older scanned books with noisy OCR and chapter-like headings.
 
-Processing behavior:
+This mode tries to detect numbered chapter headings near the top of pages. It also enables manual AI vision OCR correction for the imported book.
 
-- The importer first tries to use the PDF outline / bookmarks.
-- If no outline exists, it splits the PDF into stable page-based reading chunks.
-- AI vision OCR correction is disabled by default.
+This mode is best for books that resemble the existing *Summa Contra Gentiles* PDFs: long, old, scanned, and not always cleanly structured.
 
-## Current Built-In Books
+### Generic PDF mode
 
-The current `books/` folder includes:
+Use this for ordinary PDFs.
 
-- *Summa Contra Gentiles: On the Truth of the Catholic Faith* volume 1
+This mode first looks for a PDF outline or bookmark structure. If one exists, the book is split around those outline entries. If the PDF has no useful outline, the app falls back to stable page-based chunks.
+
+This mode does not enable AI vision OCR correction by default.
+
+## Built-in books
+
+The current project includes several PDFs in `books/`, including:
+
+- *Summa Contra Gentiles* volume 1
 - *Summa Contra Gentiles* volume 2
 - *Summa Contra Gentiles* volume 3
 - *Summa Contra Gentiles* volume 4
@@ -114,76 +115,102 @@ The current `books/` folder includes:
 - *Catechumen Guide*
 - *On the Incarnation*
 
-The actual active library is defined by `data/library.json`.
+The active library is defined by `data/library.json`, not just by the files present in `books/`.
 
-## Tech Stack
+## Tech stack
 
 - Expo SDK 54
 - Expo Router
 - React Native
 - TypeScript
-- `expo-document-picker` for selecting PDF files
-- `pdfjs-dist` for server-side PDF text extraction in API routes
-- `pdf-lib` for extracting page ranges before sending them to Gemini vision OCR
-- `undici` for server-side Gemini API requests with optional proxy support
-- Python scripts for batch extraction and offline OCR workflows
+- `expo-document-picker` for choosing PDF files
+- `pdfjs-dist` for extracting PDF text in API routes
+- `pdf-lib` for slicing page ranges before AI vision OCR
+- `undici` for server-side Gemini requests and proxy support
+- Python scripts for batch extraction and OCR workflows
 
-## Project Structure
+## Project layout
 
 ```text
 app/
-  index.tsx                       Library home screen
-  add-book.tsx                    Add-book screen
-  book/[id].tsx                   Book table of contents
-  reader/[bookId]/[chapterId].tsx Reader screen
+  index.tsx
+  add-book.tsx
+  book/[id].tsx
+  reader/[bookId]/[chapterId].tsx
   api/
-    library+api.ts                Reads the latest library
-    add-book+api.ts               Uploads PDF and updates the library
-    chapter-summary+api.ts        AI chapter summary endpoint
-    chapter-content+api.ts        AI vision OCR correction endpoint
+    add-book+api.ts
+    library+api.ts
+    chapter-summary+api.ts
+    chapter-content+api.ts
 
 components/
-  chapter-summary.tsx             AI summary component
-  live-chapter-text.tsx           Reading text and AI OCR correction component
+  chapter-summary.tsx
+  live-chapter-text.tsx
 
 lib/
-  book.ts                         Book types and static fallback library
-  use-library.ts                  Client hook for loading the latest library
-  server-library.ts               Server-side library read/write helpers
-  server-pdf-books.ts             Server-side PDF extraction and splitting
-  library-storage.ts              Local hide/restore shelf storage
+  book.ts
+  use-library.ts
+  server-library.ts
+  server-pdf-books.ts
+  library-storage.ts
 
 scripts/
-  extract-book.py                 Batch-extracts PDFs from books/ into data/library.json
-  vision-ocr.py                   Batch AI vision OCR helper script
+  extract-book.py
+  vision-ocr.py
 
-books/                            Source PDF files
+books/
 data/
-  library.json                    Book and chapter data
-  ai-cache/                       Local AI summary/OCR cache
+  library.json
+  ai-cache/
 ```
 
-## Environment Variables
+## Important files
 
-AI features depend on Gemini configuration in `.env`.
+### `data/library.json`
 
-Common variables:
+This is the extracted library. It contains book metadata, chapter metadata, extracted text, and page information.
+
+### `books/`
+
+This folder stores the source PDFs. User-imported PDFs are copied here.
+
+### `data/ai-cache/`
+
+This folder stores generated AI text.
+
+```text
+data/ai-cache/summaries/
+data/ai-cache/ocr/
+```
+
+The cache directory is ignored by Git except for `.gitkeep`.
+
+### `scripts/extract-book.py`
+
+This script rebuilds `data/library.json` from PDFs in `books/`. It is useful when maintaining the built-in library manually.
+
+### `scripts/vision-ocr.py`
+
+This script is for batch OCR workflows and experiments. The app itself uses API routes for on-demand AI correction.
+
+## Environment variables
+
+Gemini-powered features require a `.env` file.
+
+Example:
 
 ```env
-GEMINI_API_KEY=your Gemini API key
+GEMINI_API_KEY=your-api-key
 GEMINI_VOCAB_MODEL=gemini-...
 HTTP_PROXY=http://127.0.0.1:xxxx
 HTTPS_PROXY=http://127.0.0.1:xxxx
 ```
 
-Notes:
+`HTTP_PROXY` and `HTTPS_PROXY` are optional. They are useful if Gemini requests need to go through a local proxy.
 
-- `GEMINI_API_KEY` is used for AI summaries and AI vision OCR.
-- `GEMINI_VOCAB_MODEL` is the Gemini model name.
-- `HTTP_PROXY` and `HTTPS_PROXY` are optional and useful when the local network requires a proxy.
-- AI-generated text is stored under `data/ai-cache/` to avoid repeated token usage.
+Do not expose Gemini keys through `EXPO_PUBLIC_` variables. The current API routes read server-side environment variables.
 
-## Installation and Running
+## Getting started
 
 Install dependencies:
 
@@ -197,13 +224,13 @@ Start the development server:
 npm run start:proxy
 ```
 
-Equivalent Expo command:
+This runs:
 
 ```bash
-npx expo start --clear
+expo start --clear
 ```
 
-Platform helpers:
+Other useful commands:
 
 ```bash
 npm run ios
@@ -211,137 +238,52 @@ npm run android
 npm run web
 ```
 
-## Common Scripts
+## Working with books
 
-### Rebuild the Library
+### Add a book through the app
+
+1. Start the development server.
+2. Open the app.
+3. Go to the bookshelf.
+4. Press Add Book.
+5. Pick a PDF.
+6. Enter title, author, and optional translator.
+7. Choose a processing mode.
+8. Add the book to the library.
+
+### Rebuild the built-in library manually
 
 ```bash
 npm run books:rebuild
 ```
 
-Equivalent:
-
-```bash
-python scripts/extract-book.py
-```
-
-This reads PDFs from `books/` and regenerates `data/library.json`.
-
-### Batch OCR
-
-```bash
-npm run ocr:pilot
-```
-
-Runs a small bounded OCR test.
-
-```bash
-npm run ocr:all
-```
-
-Runs the full OCR workflow and rebuilds the library.
-
-## Recommended Way to Add New Books
-
-The recommended flow is to add books directly in the app:
-
-1. Start the project.
-2. Open the library home screen.
-3. Click “Add Book”.
-4. Pick a PDF.
-5. Enter title and author.
-6. Choose a processing mode.
-7. Click “Add to Library”.
-
-Choose “Summa Contra Gentiles mode” for older scanned books with noisy OCR and regular numbered chapter headings.
-
-Choose “Generic PDF mode” for regular PDFs, PDFs with outlines/bookmarks, or cleaner text layers.
-
-## Data and Cache
-
-### Library Data
+This regenerates:
 
 ```text
 data/library.json
 ```
 
-Stores all books, chapters, extracted text, and page metadata.
-
-### Source PDFs
+from the PDFs in:
 
 ```text
 books/
 ```
 
-User-added PDFs are copied here.
+### Run a small OCR test
 
-### AI Cache
-
-```text
-data/ai-cache/
+```bash
+npm run ocr:pilot
 ```
 
-Cache categories:
+### Run the full OCR workflow
 
-```text
-data/ai-cache/summaries/  AI chapter summaries
-data/ai-cache/ocr/        AI vision OCR corrections
+```bash
+npm run ocr:all
 ```
 
-This directory is ignored by Git by default, except for `.gitkeep`.
+## Development checks
 
-## Design Notes
-
-### Why does AI not run automatically?
-
-AI summaries and OCR corrections consume tokens. To avoid accidental cost, the app requires explicit user action:
-
-- AI summary: generated only after the user clicks the button
-- AI OCR: generated only after the user clicks the correction button
-- Regeneration is also manual
-
-### Why render text in multiple blocks?
-
-iOS can struggle when tens of thousands of characters are rendered inside a single React Native `<Text>` component. The app splits text into paragraph-sized blocks so long chapters remain readable and stable.
-
-### Why are there two PDF processing modes?
-
-PDF structure varies a lot:
-
-- Older scanned books may have noisy OCR but recognizable chapter headings.
-- Regular PDFs may have usable outlines/bookmarks.
-
-Letting the user choose a mode is more reliable than forcing every PDF through one algorithm.
-
-## Troubleshooting
-
-### 1. `npm run start:proxy` says port 8081 is already in use
-
-An old Expo dev server is probably still running. Close the old terminal or stop the Node process using port 8081, then start again.
-
-### 2. `[UNDICI-EHPA] EnvHttpProxyAgent is experimental`
-
-This is an `undici` warning in proxy-enabled environments. It usually does not affect the app.
-
-### 3. AI summary generation fails
-
-Check:
-
-- `.env` contains `GEMINI_API_KEY`
-- `.env` contains `GEMINI_VOCAB_MODEL`
-- The network or proxy can reach the Gemini API
-
-### 4. AI OCR says the chapter has too many pages
-
-Realtime OCR has a page limit to avoid sending very large PDFs to Gemini in one request. Use it on shorter chapters or split the book into smaller reading sections.
-
-### 5. A newly added PDF does not appear immediately
-
-Return to the library screen and refresh/reopen it, or restart the dev server. The shelf tries to read `/api/library` first and falls back to the bundled `data/library.json` if the API is unavailable.
-
-## Development Checks
-
-Type check:
+TypeScript:
 
 ```bash
 npx tsc --noEmit
@@ -359,6 +301,33 @@ Web export:
 npx expo export --platform web
 ```
 
+## Troubleshooting
+
+### Port 8081 is already in use
+
+An old Expo development server is still running. Stop the old Node process or close the terminal that started it, then run the dev server again.
+
+### `EnvHttpProxyAgent is experimental`
+
+This warning comes from `undici` when proxy environment variables are enabled. It is usually harmless.
+
+### AI summaries fail
+
+Check that:
+
+- `GEMINI_API_KEY` is set
+- `GEMINI_VOCAB_MODEL` is set
+- your proxy configuration works, if a proxy is required
+- the dev server was restarted after editing `.env`
+
+### AI OCR refuses a chapter because it is too long
+
+The OCR endpoint limits how many pages can be sent in one request. This protects against very large Gemini requests. Use OCR on shorter sections, or split the book more finely.
+
+### A newly added book does not appear
+
+Return to the bookshelf and reopen it, or restart the development server. The app tries to load the latest library from `/api/library` and falls back to the bundled JSON if the API is unavailable.
+
 ## Notes
 
-This project is currently designed as a local personal reading tool, not as a multi-user cloud library. PDFs, extracted library JSON, and AI caches all live in the local project directory. This keeps the workflow simple, transparent, and easy to inspect or manually correct.
+This project favors transparency over automation. Generated files are plain JSON or text files, PDFs remain in the local filesystem, and AI output is cached in readable `.txt` files. That makes it easy to inspect, edit, back up, or delete any part of the reading library.
