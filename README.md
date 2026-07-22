@@ -1,207 +1,209 @@
 # Daily Reading
 
-Daily Reading 是一个用 Expo / React Native 做的本地阅读软件。它的目标很朴素：把 `books/` 里的 PDF 书籍提取成适合手机阅读的章节文本，并在阅读前提供 AI 详细总结、必要时提供 AI 视觉 OCR 校正文，帮助用户读旧版神学、哲学、教会史类书籍。
+Daily Reading is a local reading app built with Expo and React Native. Its purpose is simple: take PDF books from the local `books/` folder, extract their text into mobile-friendly reading sections, and optionally provide AI-generated chapter summaries and AI vision OCR correction for difficult scanned books.
 
-当前项目主要围绕中文旧书扫描 PDF 做优化，尤其适合《驳异大全》这类 OCR 质量不稳定、章节结构复杂的书。
+The project is especially optimized for older Chinese theological, philosophical, and church-history PDFs whose OCR quality can be uneven, such as *Summa Contra Gentiles* in Chinese translation.
 
-## 主要功能
+## Features
 
-### 1. 本地书架
+### 1. Local Library
 
-- 首页显示当前书库中的所有图书。
-- 每本书显示书名、作者、章节/阅读段数量和 PDF 页数。
-- 用户可以从书架隐藏某本书，也可以恢复已隐藏图书。
-- 书库数据来自 `data/library.json`，运行时也可以通过 API 读取最新版本。
+- The home screen displays all books in the current library.
+- Each book card shows the title, author, section count, and PDF page count.
+- Users can hide books from the shelf and restore hidden books later.
+- Library data is stored in `data/library.json`.
+- At runtime, the app can also fetch the latest library through the local API route.
 
-### 2. 分章阅读
+### 2. Chapter-Based Reading
 
-- PDF 会被提取成适合手机阅读的文本。
-- 阅读页支持：
-  - 章节标题
-  - 当前所属部分
-  - PDF 起始页码
-  - 上一章 / 下一章导航
-  - 字号增大 / 减小
-  - 段落化正文，避免 iOS 上超长 `<Text>` 不可读
+- PDF text is extracted and converted into mobile-friendly reading sections.
+- The reader screen supports:
+  - Chapter or section title
+  - Current book section
+  - Original PDF start page
+  - Previous / next navigation
+  - Font size controls
+  - Paragraph-based text rendering to avoid iOS issues with extremely long `<Text>` blocks
 
-### 3. AI 详细总结
+### 3. AI Chapter Summaries
 
-每章顶部都有 AI 总结区域。
+Each chapter has an AI summary panel at the top.
 
-- 默认不会自动调用 AI，避免浪费 token。
-- 用户点击按钮后才会生成详细总结。
-- 总结会保存到本地缓存目录：
+- AI summaries do not run automatically, which prevents accidental token usage.
+- The user must click the summary button manually.
+- Generated summaries are saved locally:
 
 ```text
 data/ai-cache/summaries/<bookId>/<chapterId>.txt
 ```
 
-- 如果用户不满意，可以点击重新生成。
-- 重新生成会再次调用 Gemini API，并覆盖/更新缓存。
+- If the user is not satisfied, they can regenerate the summary.
+- Regeneration calls Gemini again and updates the local cache.
 
-### 4. AI 视觉 OCR 校正文
+### 4. AI Vision OCR Correction
 
-部分 OCR 质量差的书支持手动 AI 视觉校正。
+Some books have poor built-in OCR and support manual AI vision correction.
 
-目前支持：
+Currently supported:
 
-- 《驳异大全》四卷
-- 《天主之城》
-- 用户新添加图书时，如果选择“驳异大全模式”，也会开启该功能
+- The four *Summa Contra Gentiles* volumes
+- *The City of God*
+- User-added books that are imported with “Summa Contra Gentiles mode”
 
-特点：
+Behavior:
 
-- 不自动运行，需要用户手动点击“AI校正”。
-- 如果已有本地缓存，会优先使用缓存。
-- 校正文保存到：
+- AI OCR does not run automatically.
+- The user must manually click the AI correction button.
+- If a cached correction exists, the app uses the cached text first.
+- Corrected OCR text is saved to:
 
 ```text
 data/ai-cache/ocr/<bookId>/<chapterId>.txt
 ```
 
-- 如果 AI 处理失败，会继续显示旧 OCR 文本。
+- If AI correction fails, the app keeps showing the original OCR text.
 
-### 5. 用户添加图书
+### 5. User-Added Books
 
-书架首页有“添加图书”入口。
+The library home screen includes an “Add Book” entry.
 
-用户可以：
+Users can:
 
-1. 从手机或电脑选择 PDF。
-2. 填写书名、作者、译者。
-3. 选择处理方式：
-   - “驳异大全模式”
-   - “一般 PDF 模式”
-4. 添加后，PDF 会保存到 `books/`。
-5. 新书记录会写入 `data/library.json`。
+1. Pick a PDF from the device or computer.
+2. Enter title, author, and translator.
+3. Choose a processing mode:
+   - “Summa Contra Gentiles mode”
+   - “Generic PDF mode”
+4. Save the PDF into `books/`.
+5. Write the new book record into `data/library.json`.
 
-#### 驳异大全模式
+#### Summa Contra Gentiles Mode
 
-适合旧书扫描 PDF，尤其是：
+This mode is intended for older scanned books, especially when:
 
-- OCR 有错字
-- 章节以“第X章”为主
-- 需要 AI 视觉 OCR 校正文
+- OCR has frequent errors
+- Chapters are marked with regular numbered chapter headings
+- The book may benefit from AI vision OCR correction
 
-处理逻辑：
+Processing behavior:
 
-- 尝试从页面开头识别“第X章”。
-- 自动生成章节节点。
-- 开启手动 AI OCR 校正文。
+- The importer tries to detect chapter headings near the beginning of each page.
+- It generates chapter-like reading nodes.
+- It enables manual AI OCR correction for the imported book.
 
-#### 一般 PDF 模式
+#### Generic PDF Mode
 
-适合普通 PDF 或结构比较规整的书。
+This mode is intended for regular PDFs or books with a cleaner structure.
 
-处理逻辑：
+Processing behavior:
 
-- 优先读取 PDF 内置目录/书签。
-- 如果没有目录，则按页数切成稳定的阅读段。
-- 默认不开启 AI 视觉 OCR 校正文。
+- The importer first tries to use the PDF outline / bookmarks.
+- If no outline exists, it splits the PDF into stable page-based reading chunks.
+- AI vision OCR correction is disabled by default.
 
-## 当前内置书籍
+## Current Built-In Books
 
-项目当前 `books/` 目录包含：
+The current `books/` folder includes:
 
-- 《驳异大全·论真原》
-- 《驳异大全·论万物》
-- 《驳异大全·论万事》
-- 《驳异大全·论奥理》
-- 《基督大能两千年·中世纪》
-- 《天主之城》
-- 《慕道者指南》
-- 《论道成肉身》
+- *Summa Contra Gentiles: On the Truth of the Catholic Faith* volume 1
+- *Summa Contra Gentiles* volume 2
+- *Summa Contra Gentiles* volume 3
+- *Summa Contra Gentiles* volume 4
+- *2,000 Years of Christ’s Power: The Middle Ages*
+- *The City of God*
+- *Catechumen Guide*
+- *On the Incarnation*
 
-实际书库内容以 `data/library.json` 为准。
+The actual active library is defined by `data/library.json`.
 
-## 技术栈
+## Tech Stack
 
 - Expo SDK 54
 - Expo Router
 - React Native
 - TypeScript
-- `expo-document-picker`：选择 PDF 文件
-- `pdfjs-dist`：在 API route 中提取 PDF 文本
-- `pdf-lib`：抽取 PDF 页段给 Gemini 视觉 OCR
-- `undici`：服务端请求 Gemini API，可走代理
-- Python 脚本：用于批量重建内置书库和离线 OCR 流程
+- `expo-document-picker` for selecting PDF files
+- `pdfjs-dist` for server-side PDF text extraction in API routes
+- `pdf-lib` for extracting page ranges before sending them to Gemini vision OCR
+- `undici` for server-side Gemini API requests with optional proxy support
+- Python scripts for batch extraction and offline OCR workflows
 
-## 项目结构
+## Project Structure
 
 ```text
 app/
-  index.tsx                       书架首页
-  add-book.tsx                    添加图书页面
-  book/[id].tsx                   图书目录页
-  reader/[bookId]/[chapterId].tsx 阅读页
+  index.tsx                       Library home screen
+  add-book.tsx                    Add-book screen
+  book/[id].tsx                   Book table of contents
+  reader/[bookId]/[chapterId].tsx Reader screen
   api/
-    library+api.ts                读取最新书库
-    add-book+api.ts               上传 PDF 并写入书库
-    chapter-summary+api.ts        AI 章节总结
-    chapter-content+api.ts        AI 视觉 OCR 校正文
+    library+api.ts                Reads the latest library
+    add-book+api.ts               Uploads PDF and updates the library
+    chapter-summary+api.ts        AI chapter summary endpoint
+    chapter-content+api.ts        AI vision OCR correction endpoint
 
 components/
-  chapter-summary.tsx             章节 AI 总结组件
-  live-chapter-text.tsx           正文与 AI OCR 校正组件
+  chapter-summary.tsx             AI summary component
+  live-chapter-text.tsx           Reading text and AI OCR correction component
 
 lib/
-  book.ts                         书库类型与静态 fallback
-  use-library.ts                  前端读取最新书库 hook
-  server-library.ts               服务端读写 data/library.json
-  server-pdf-books.ts             服务端 PDF 提取与切分逻辑
-  library-storage.ts              隐藏/恢复书籍的本地存储
+  book.ts                         Book types and static fallback library
+  use-library.ts                  Client hook for loading the latest library
+  server-library.ts               Server-side library read/write helpers
+  server-pdf-books.ts             Server-side PDF extraction and splitting
+  library-storage.ts              Local hide/restore shelf storage
 
 scripts/
-  extract-book.py                 从 books/ 批量提取生成 data/library.json
-  vision-ocr.py                   批量视觉 OCR 辅助脚本
+  extract-book.py                 Batch-extracts PDFs from books/ into data/library.json
+  vision-ocr.py                   Batch AI vision OCR helper script
 
-books/                            PDF 原书
+books/                            Source PDF files
 data/
-  library.json                    书库与章节正文数据
-  ai-cache/                       AI 总结/OCR 本地缓存
+  library.json                    Book and chapter data
+  ai-cache/                       Local AI summary/OCR cache
 ```
 
-## 环境变量
+## Environment Variables
 
-AI 功能依赖 `.env` 中的 Gemini 配置。
+AI features depend on Gemini configuration in `.env`.
 
-常用变量：
+Common variables:
 
 ```env
-GEMINI_API_KEY=你的 Gemini API Key
+GEMINI_API_KEY=your Gemini API key
 GEMINI_VOCAB_MODEL=gemini-...
 HTTP_PROXY=http://127.0.0.1:xxxx
 HTTPS_PROXY=http://127.0.0.1:xxxx
 ```
 
-说明：
+Notes:
 
-- `GEMINI_API_KEY` 用于 AI 总结和 AI 视觉 OCR。
-- `GEMINI_VOCAB_MODEL` 是要调用的 Gemini 模型。
-- `HTTP_PROXY` / `HTTPS_PROXY` 可选，如果本地网络需要代理就配置。
-- AI 结果会写入 `data/ai-cache/`，避免重复调用。
+- `GEMINI_API_KEY` is used for AI summaries and AI vision OCR.
+- `GEMINI_VOCAB_MODEL` is the Gemini model name.
+- `HTTP_PROXY` and `HTTPS_PROXY` are optional and useful when the local network requires a proxy.
+- AI-generated text is stored under `data/ai-cache/` to avoid repeated token usage.
 
-## 安装与运行
+## Installation and Running
 
-安装依赖：
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-启动开发服务：
+Start the development server:
 
 ```bash
 npm run start:proxy
 ```
 
-或者：
+Equivalent Expo command:
 
 ```bash
 npx expo start --clear
 ```
 
-常用平台命令：
+Platform helpers:
 
 ```bash
 npm run ios
@@ -209,154 +211,154 @@ npm run android
 npm run web
 ```
 
-## 常用脚本
+## Common Scripts
 
-### 重建书库
+### Rebuild the Library
 
 ```bash
 npm run books:rebuild
 ```
 
-等价于：
+Equivalent:
 
 ```bash
 python scripts/extract-book.py
 ```
 
-它会读取 `books/` 中的 PDF，并重新生成 `data/library.json`。
+This reads PDFs from `books/` and regenerates `data/library.json`.
 
-### 批量 OCR
+### Batch OCR
 
 ```bash
 npm run ocr:pilot
 ```
 
-用于小范围测试视觉 OCR。
+Runs a small bounded OCR test.
 
 ```bash
 npm run ocr:all
 ```
 
-用于完整批量 OCR，并重建书库。
+Runs the full OCR workflow and rebuilds the library.
 
-## 添加新书的推荐方式
+## Recommended Way to Add New Books
 
-现在推荐直接在 App 中添加：
+The recommended flow is to add books directly in the app:
 
-1. 启动项目。
-2. 打开书架首页。
-3. 点击“添加图书”。
-4. 选择 PDF。
-5. 填写书名和作者。
-6. 选择处理方式。
-7. 点击“添加到书库”。
+1. Start the project.
+2. Open the library home screen.
+3. Click “Add Book”.
+4. Pick a PDF.
+5. Enter title and author.
+6. Choose a processing mode.
+7. Click “Add to Library”.
 
-如果是旧版扫描书、OCR 错字多、章节像《驳异大全》一样以“第X章”为主，选择“驳异大全模式”。
+Choose “Summa Contra Gentiles mode” for older scanned books with noisy OCR and regular numbered chapter headings.
 
-如果是普通 PDF、有目录或文字层较好，选择“一般 PDF 模式”。
+Choose “Generic PDF mode” for regular PDFs, PDFs with outlines/bookmarks, or cleaner text layers.
 
-## 数据与缓存
+## Data and Cache
 
-### 书库数据
+### Library Data
 
 ```text
 data/library.json
 ```
 
-这里保存所有图书、章节标题、正文、页码等。
+Stores all books, chapters, extracted text, and page metadata.
 
-### PDF 原文件
+### Source PDFs
 
 ```text
 books/
 ```
 
-用户添加图书后，PDF 会复制到这里。
+User-added PDFs are copied here.
 
-### AI 缓存
+### AI Cache
 
 ```text
 data/ai-cache/
 ```
 
-缓存分两类：
+Cache categories:
 
 ```text
-data/ai-cache/summaries/  AI 章节总结
-data/ai-cache/ocr/        AI 视觉 OCR 校正文
+data/ai-cache/summaries/  AI chapter summaries
+data/ai-cache/ocr/        AI vision OCR corrections
 ```
 
-这个目录默认被 `.gitignore` 忽略，只保留 `.gitkeep`。
+This directory is ignored by Git by default, except for `.gitkeep`.
 
-## 重要设计说明
+## Design Notes
 
-### 为什么 AI 不自动运行？
+### Why does AI not run automatically?
 
-AI 总结和 OCR 都会消耗 token。为了避免打开章节就自动花费 token，项目设计为手动触发：
+AI summaries and OCR corrections consume tokens. To avoid accidental cost, the app requires explicit user action:
 
-- AI 总结：用户点击后生成
-- AI OCR：用户点击后校正
-- 不满意可以重新生成
+- AI summary: generated only after the user clicks the button
+- AI OCR: generated only after the user clicks the correction button
+- Regeneration is also manual
 
-### 为什么正文要分段渲染？
+### Why render text in multiple blocks?
 
-iOS 上如果把几万字塞进一个 `<Text>`，容易出现空白、卡顿或不可阅读。项目会把正文拆成多个自然段 `<Text>` 渲染，让长章节也能稳定阅读。
+iOS can struggle when tens of thousands of characters are rendered inside a single React Native `<Text>` component. The app splits text into paragraph-sized blocks so long chapters remain readable and stable.
 
-### 为什么有两种 PDF 处理模式？
+### Why are there two PDF processing modes?
 
-不同 PDF 的结构差异很大：
+PDF structure varies a lot:
 
-- 《驳异大全》这类旧书扫描 OCR 错字多，但章节规律明显。
-- 普通 PDF 可能有目录/书签，按目录切更稳。
+- Older scanned books may have noisy OCR but recognizable chapter headings.
+- Regular PDFs may have usable outlines/bookmarks.
 
-所以添加图书时让用户选择模式，比强行用一种规则更可靠。
+Letting the user choose a mode is more reliable than forcing every PDF through one algorithm.
 
-## 常见问题
+## Troubleshooting
 
-### 1. `npm run start:proxy` 提示端口 8081 被占用
+### 1. `npm run start:proxy` says port 8081 is already in use
 
-说明旧的 Expo dev server 还在运行。关闭旧终端，或结束占用 8081 的 Node 进程后重新启动。
+An old Expo dev server is probably still running. Close the old terminal or stop the Node process using port 8081, then start again.
 
-### 2. 出现 `[UNDICI-EHPA] EnvHttpProxyAgent is experimental`
+### 2. `[UNDICI-EHPA] EnvHttpProxyAgent is experimental`
 
-这是 `undici` 在代理环境下的提示，通常不影响运行。
+This is an `undici` warning in proxy-enabled environments. It usually does not affect the app.
 
-### 3. AI 总结失败
+### 3. AI summary generation fails
 
-检查：
+Check:
 
-- `.env` 是否有 `GEMINI_API_KEY`
-- `.env` 是否有 `GEMINI_VOCAB_MODEL`
-- 网络/代理是否能访问 Gemini API
+- `.env` contains `GEMINI_API_KEY`
+- `.env` contains `GEMINI_VOCAB_MODEL`
+- The network or proxy can reach the Gemini API
 
-### 4. AI OCR 提示章节页数太多
+### 4. AI OCR says the chapter has too many pages
 
-实时 OCR 有页数限制，避免一次发送过大的 PDF 给 Gemini。可以考虑把书切得更细，或只对较短章节使用 AI OCR。
+Realtime OCR has a page limit to avoid sending very large PDFs to Gemini in one request. Use it on shorter chapters or split the book into smaller reading sections.
 
-### 5. 新增 PDF 后没有立刻显示
+### 5. A newly added PDF does not appear immediately
 
-回到书架刷新页面，或重启 dev server。书架会优先读取 `/api/library` 的最新书库，如果 API 不可用则使用打包时的 fallback。
+Return to the library screen and refresh/reopen it, or restart the dev server. The shelf tries to read `/api/library` first and falls back to the bundled `data/library.json` if the API is unavailable.
 
-## 开发检查
+## Development Checks
 
-类型检查：
+Type check:
 
 ```bash
 npx tsc --noEmit
 ```
 
-Lint：
+Lint:
 
 ```bash
 npm run lint
 ```
 
-Web 导出：
+Web export:
 
 ```bash
 npx expo export --platform web
 ```
 
-## 备注
+## Notes
 
-这个项目目前更偏向本地个人阅读工具，而不是多用户云端书库。PDF、书库 JSON、AI 缓存都保存在本地项目目录中。这样做的好处是简单、透明、可控，也方便检查和手动修正 OCR/章节数据。
+This project is currently designed as a local personal reading tool, not as a multi-user cloud library. PDFs, extracted library JSON, and AI caches all live in the local project directory. This keeps the workflow simple, transparent, and easy to inspect or manually correct.
