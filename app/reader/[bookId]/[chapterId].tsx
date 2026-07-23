@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ChapterSummary } from '@/components/chapter-summary';
+import { ChapterTranslation } from '@/components/chapter-translation';
 import { LiveChapterText } from '@/components/live-chapter-text';
 import { getBookFrom, getChapterFrom } from '@/lib/book';
 import { useLibrary } from '@/lib/use-library';
@@ -28,15 +29,24 @@ export default function ReaderScreen() {
   const previous = book.chapters[index - 1];
   const next = book.chapters[index + 1];
   const aiOcrEnabled = book.processingMode === 'scg' || BUILT_IN_AI_OCR_BOOK_IDS.has(book.id);
+  const translationEnabled = isEnglishText(chapter.content);
 
   return (
     <>
       <Stack.Screen options={{ title: chapter.title.split(' · ')[0] }} />
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-        <Text style={styles.section}>{book.title} · {chapter.section} · PDF 第 {chapter.startPage} 页</Text>
+        <Text style={styles.section}>
+          {book.title} · {chapter.section} · {book.sourceType === 'epub' ? `EPUB 第 ${chapter.startPage} 段` : `PDF 第 ${chapter.startPage} 页`}
+        </Text>
         <Text selectable style={styles.title}>{chapter.title}</Text>
         <View style={styles.divider} />
         <ChapterSummary key={`summary:${book.id}:${chapter.id}`} bookId={book.id} chapterId={chapter.id} />
+        <ChapterTranslation
+          key={`translation:${book.id}:${chapter.id}`}
+          bookId={book.id}
+          chapterId={chapter.id}
+          enabled={translationEnabled}
+        />
         <LiveChapterText
           key={`content:${book.id}:${chapter.id}`}
           bookId={book.id}
@@ -78,6 +88,13 @@ function ChapterButton({ bookId, chapterId, label, title, reverse = false }: { b
       </Pressable>
     </Link>
   );
+}
+
+function isEnglishText(text: string) {
+  const sample = text.slice(0, 4000);
+  const englishLetters = (sample.match(/[A-Za-z]/g) || []).length;
+  const cjkCharacters = (sample.match(/[\u3400-\u9fff]/g) || []).length;
+  return englishLetters >= 120 && englishLetters > cjkCharacters * 2;
 }
 
 const styles = StyleSheet.create({

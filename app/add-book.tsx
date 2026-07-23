@@ -3,9 +3,11 @@ import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { apiUrl, readJsonResponse } from '@/lib/api-client';
+
 type ProcessingMode = 'scg' | 'generic';
 
-type PickedPdf = {
+type PickedBookFile = {
   name: string;
   uri: string;
   mimeType?: string;
@@ -26,56 +28,56 @@ const modeOptions: { value: ProcessingMode; title: string; description: string }
   },
   {
     value: 'generic',
-    title: '一般 PDF 模式',
-    description: '适合普通 PDF：优先按 PDF 目录切分；没有目录时按页数分段，稳定可读。',
+    title: '一般 PDF/EPUB 模式',
+    description: '适合普通 PDF 或 EPUB：PDF 优先按目录切分；EPUB 按内置章节文件切分。',
   },
 ];
 
 export default function AddBookScreen() {
-  const [pickedPdf, setPickedPdf] = useState<PickedPdf | null>(null);
+  const [pickedFile, setPickedFile] = useState<PickedBookFile | null>(null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [translator, setTranslator] = useState('');
   const [mode, setMode] = useState<ProcessingMode>('generic');
   const [submitting, setSubmitting] = useState(false);
-  const canSubmit = Boolean(pickedPdf && title.trim() && !submitting);
+  const canSubmit = Boolean(pickedFile && title.trim() && !submitting);
   const sizeLabel = useMemo(() => {
-    if (!pickedPdf?.size) return '';
-    if (pickedPdf.size > 1024 * 1024) return `${(pickedPdf.size / 1024 / 1024).toFixed(1)} MB`;
-    return `${Math.max(1, Math.round(pickedPdf.size / 1024))} KB`;
-  }, [pickedPdf]);
+    if (!pickedFile?.size) return '';
+    if (pickedFile.size > 1024 * 1024) return `${(pickedFile.size / 1024 / 1024).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(pickedFile.size / 1024))} KB`;
+  }, [pickedFile]);
 
-  async function pickPdf() {
+  async function pickBookFile() {
     const result = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
+      type: ['application/pdf', 'application/epub+zip', 'application/octet-stream'],
       copyToCacheDirectory: true,
       multiple: false,
     });
 
     if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0] as PickedPdf;
-    setPickedPdf(asset);
-    if (!title.trim()) setTitle(asset.name.replace(/\.pdf$/i, ''));
+    const asset = result.assets[0] as PickedBookFile;
+    setPickedFile(asset);
+    if (!title.trim()) setTitle(asset.name.replace(/\.(pdf|epub)$/i, ''));
   }
 
   async function submit() {
-    if (!pickedPdf || !title.trim()) return;
+    if (!pickedFile || !title.trim()) return;
     setSubmitting(true);
 
     try {
       const form = new FormData();
-      appendPdf(form, pickedPdf);
+      appendBookFile(form, pickedFile);
       form.append('title', title.trim());
       form.append('author', author.trim());
       form.append('translator', translator.trim());
       form.append('mode', mode);
 
-      const response = await fetch('/api/add-book', {
+      const response = await fetch(apiUrl('/api/add-book'), {
         method: 'POST',
         body: form,
       });
-      const data = await response.json() as AddBookResponse;
-      if (!response.ok || !data.book) throw new Error(data.error || `添加失败（${response.status}）`);
+      const data = await readJsonResponse<AddBookResponse>(response);
+      if (!data.book) throw new Error('添加图书接口没有返回书籍信息');
 
       Alert.alert(
         '添加成功',
@@ -94,17 +96,17 @@ export default function AddBookScreen() {
       <Stack.Screen options={{ title: '添加图书' }} />
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>本地 PDF 入库</Text>
+          <Text style={styles.eyebrow}>本地图书入库</Text>
           <Text style={styles.heading}>选择一本书，然后决定怎么切分</Text>
-          <Text style={styles.note}>添加后 PDF 会保存到项目的 books 文件夹，正文会写入 data/library.json。</Text>
+          <Text style={styles.note}>添加后文件会保存到项目的 books 文件夹，正文会写入 data/library.json。</Text>
         </View>
 
         <Pressable
           accessibilityRole="button"
-          onPress={pickPdf}
+          onPress={pickBookFile}
           style={({ pressed }) => StyleSheet.flatten([styles.fileBox, pressed ? styles.pressed : undefined])}>
-          <Text style={styles.fileTitle}>{pickedPdf ? pickedPdf.name : '选择 PDF 文件'}</Text>
-          <Text style={styles.fileMeta}>{pickedPdf ? `${sizeLabel || '已选择'} · 点此更换` : '从 iCloud、文件 App 或本机选择一本 PDF'}</Text>
+          <Text style={styles.fileTitle}>{pickedFile ? pickedFile.name : '选择 PDF 或 EPUB 文件'}</Text>
+          <Text style={styles.fileMeta}>{pickedFile ? `${sizeLabel || '已选择'} · 点此更换` : '从 iCloud、文件 App 或本机选择一本 PDF/EPUB'}</Text>
         </Pressable>
 
         <View style={styles.form}>
@@ -152,16 +154,16 @@ function Label({ text }: { text: string }) {
   return <Text style={styles.label}>{text}</Text>;
 }
 
-function appendPdf(form: FormData, pdf: PickedPdf) {
-  if (pdf.file) {
-    form.append('file', pdf.file, pdf.name);
+function appendBookFile(form: FormData, bookFile: PickedBookFile) {
+  if (bookFile.file) {
+    form.append('file', bookFile.file, bookFile.name);
     return;
   }
 
   form.append('file', {
-    uri: pdf.uri,
-    name: pdf.name,
-    type: pdf.mimeType || 'application/pdf',
+    uri: bookFile.uri,
+    name: bookFile.name,
+    type: bookFile.mimeType || (bookFile.name.toLowerCase().endsWith('.epub') ? 'application/epub+zip' : 'application/pdf'),
   } as unknown as Blob);
 }
 

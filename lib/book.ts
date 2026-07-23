@@ -14,6 +14,7 @@ export type Book = {
   author: string;
   translator: string;
   sourceFile: string;
+  sourceType?: 'pdf' | 'epub';
   pageCount: number;
   processingMode?: 'scg' | 'generic';
   visionOcrPageCount?: number;

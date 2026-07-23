@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { apiUrl, readJsonResponse } from '@/lib/api-client';
+
 type LiveStatus = 'disabled' | 'idle' | 'loading' | 'ready' | 'failed';
 
 type CorrectedContentResponse = {
@@ -60,16 +62,14 @@ export function LiveChapterText({
       setMessage('');
 
       try {
-        const response = await fetch('/api/chapter-content', {
+        const response = await fetch(apiUrl('/api/chapter-content'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookId, chapterId, force: request.force }),
           signal: controller.signal,
         });
-        const data = await response.json() as CorrectedContentResponse;
-        if (!response.ok || !data.content) {
-          throw new Error(data.error || `实时校正文失败（${response.status}）`);
-        }
+        const data = await readJsonResponse<CorrectedContentResponse>(response);
+        if (!data.content) throw new Error('实时校正文接口没有返回正文');
         if (cancelled) return;
 
         correctedTextCache.set(cacheKey, data.content);

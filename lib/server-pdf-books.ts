@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { strFromU8, unzipSync } from 'fflate';
 
 import type { Book, Chapter } from '@/lib/book';
 
@@ -22,6 +23,15 @@ type AddBookInput = {
   sourceFile: string;
   pdfBytes: Uint8Array;
   mode: AddBookMode;
+};
+
+type AddEpubInput = {
+  id: string;
+  title: string;
+  author: string;
+  translator: string;
+  sourceFile: string;
+  epubBytes: Uint8Array;
 };
 
 const CHAPTER_RE = /第([一二三四五六七八九十百零〇○0-9]+)章/g;
@@ -59,8 +69,44 @@ export async function createBookFromPdf(input: AddBookInput): Promise<Book> {
     author: input.author,
     translator: input.translator,
     sourceFile: input.sourceFile,
+    sourceType: 'pdf',
     pageCount: document.numPages,
     processingMode: input.mode,
+    visionOcrPageCount: 0,
+    chapters,
+  };
+}
+
+export function createBookFromEpub(input: AddEpubInput): Book {
+  const files = unzipSync(input.epubBytes);
+  const textFiles = getEpubTextFiles(files);
+
+  const chapters: Chapter[] = [];
+  let section = 'EPUB';
+  for (const fileName of textFiles) {
+    if (/nav|toc|cover|titlepage|copyright|_tp_|_cop_/i.test(fileName)) continue;
+    const text = htmlToText(strFromU8(files[fileName]));
+    if (text.length < 80) continue;
+    const title = firstReadableLine(text) || path.basename(fileName, path.extname(fileName));
+    if (/^part\s+/i.test(title)) section = title;
+    chapters.push({
+      id: String(chapters.length + 1),
+      section,
+      title,
+      content: text,
+      startPage: chapters.length + 1,
+    });
+  }
+
+  return {
+    id: input.id,
+    title: input.title,
+    author: input.author,
+    translator: input.translator,
+    sourceFile: input.sourceFile,
+    sourceType: 'epub',
+    pageCount: chapters.length,
+    processingMode: 'generic',
     visionOcrPageCount: 0,
     chapters,
   };
@@ -266,7 +312,8 @@ function chapterTitle(text: string, label: string) {
 
 export function sanitizeFileName(value: string) {
   const base = path.basename(value).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
-  return base.toLowerCase().endsWith('.pdf') ? base : `${base || 'book'}.pdf`;
+  if (/\.(pdf|epub)$/i.test(base)) return base;
+  return `${base || 'book'}.pdf`;
 }
 
 export function slugifyBookId(value: string) {
@@ -278,4 +325,107 @@ export function slugifyBookId(value: string) {
     .toLowerCase();
 
   return slug || `book-${Date.now()}`;
+}
+
+function scoreEpubPath(fileName: string) {
+  const match = fileName.match(/(?:^|[_-])(?:c|p)(\d{3,})/i) || fileName.match(/(\d+)/);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function getEpubTextFiles(files: Record<string, Uint8Array>) {
+  const spineFiles = getEpubSpineFiles(files);
+  if (spineFiles.length) return spineFiles;
+
+  return Object.keys(files)
+    .filter((name) => /\.(xhtml|html|htm)$/i.test(name))
+    .sort((left, right) => scoreEpubPath(left) - scoreEpubPath(right) || left.localeCompare(right));
+}
+
+function getEpubSpineFiles(files: Record<string, Uint8Array>) {
+  const container = readZipText(files, 'META-INF/container.xml');
+  const packagePath = container.match(/full-path=["']([^"']+)["']/i)?.[1];
+  if (!packagePath) return [];
+
+  const packageDocument = readZipText(files, packagePath);
+  if (!packageDocument) return [];
+
+  const packageDir = path.posix.dirname(packagePath);
+  const manifest = new Map<string, string>();
+  const itemPattern = /<item\b[^>]*>/gi;
+  for (const [item] of packageDocument.matchAll(itemPattern)) {
+    const id = xmlAttribute(item, 'id');
+    const href = xmlAttribute(item, 'href');
+    const mediaType = xmlAttribute(item, 'media-type');
+    if (!id || !href || (mediaType && !/(xhtml|html)/i.test(mediaType))) continue;
+    manifest.set(id, normalizeEpubPath(path.posix.join(packageDir, href)));
+  }
+
+  const spineFiles: string[] = [];
+  const itemrefPattern = /<itemref\b[^>]*>/gi;
+  for (const [itemref] of packageDocument.matchAll(itemrefPattern)) {
+    const idref = xmlAttribute(itemref, 'idref');
+    const fileName = idref ? manifest.get(idref) : undefined;
+    if (fileName && files[fileName] && /\.(xhtml|html|htm)$/i.test(fileName)) spineFiles.push(fileName);
+  }
+
+  return spineFiles.filter((fileName, index, items) => items.indexOf(fileName) === index);
+}
+
+function readZipText(files: Record<string, Uint8Array>, fileName: string) {
+  const direct = files[fileName];
+  if (direct) return strFromU8(direct);
+
+  const normalizedTarget = normalizeEpubPath(fileName).toLowerCase();
+  const matchingName = Object.keys(files).find((name) => normalizeEpubPath(name).toLowerCase() === normalizedTarget);
+  return matchingName ? strFromU8(files[matchingName]) : '';
+}
+
+function xmlAttribute(tag: string, name: string) {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']+)["']`, 'i'));
+  return match ? decodeHtml(match[1]) : '';
+}
+
+function normalizeEpubPath(fileName: string) {
+  try {
+    return decodeURIComponent(fileName).replace(/\\/g, '/').replace(/^\/+/, '');
+  } catch {
+    return fileName.replace(/\\/g, '/').replace(/^\/+/, '');
+  }
+}
+
+function htmlToText(markup: string) {
+  const withoutNoise = markup
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|section|article|blockquote|h[1-6]|li)>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ');
+
+  return decodeHtml(withoutNoise)
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, decimal: string) => String.fromCodePoint(Number.parseInt(decimal, 10)));
+}
+
+function firstReadableLine(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length >= 3 && line.length <= 120);
 }

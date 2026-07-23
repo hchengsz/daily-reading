@@ -1,11 +1,15 @@
-"""Extract the bundled PDF into chapter-oriented JSON for the mobile reader."""
+"""Extract bundled PDF/EPUB books into chapter-oriented JSON for the mobile reader."""
 
 from __future__ import annotations
 
 import json
 import re
 import sys
+import zipfile
+import html
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_PYTHON_PACKAGES = ROOT / ".python-packages"
@@ -124,6 +128,8 @@ def book_metadata(source: Path) -> dict[str, str]:
         return {"id": "christs-power-middle-ages", "title": "基督大能两千年·中世纪", "author": "尼克・尼德姆", "translator": "路丹 译；贾少彬 校"}
     if "天主之城" in stem:
         return {"id": "city-of-god", "title": "天主之城", "author": "圣奥古斯丁", "translator": ""}
+    if "Life_Is_Worth_Living" in stem or "Worth_Living" in stem:
+        return {"id": "your-life-is-worth-living", "title": "Your Life Is Worth Living", "author": "Fulton Sheen", "translator": ""}
     return {"id": "summa-contra-gentiles", "title": "驳异大全（合集）", "author": "圣多玛斯・阿奎纳", "translator": "吕穆迪 译述"}
 
 
@@ -145,7 +151,90 @@ def read_pdf_pages(source: Path, prefer_pypdf: bool = False) -> list[str]:
     raise RuntimeError("需要安装 PyMuPDF 或 pypdf 才能提取 PDF 文字")
 
 
+def epub_text_from_html(markup: str) -> str:
+    markup = re.sub(r"(?is)<(script|style|svg|head|nav)[^>]*>.*?</\1>", " ", markup)
+    markup = re.sub(r"(?i)<br\s*/?>", "\n", markup)
+    markup = re.sub(r"(?i)</(p|div|section|article|blockquote|h[1-6]|li)>", "\n\n", markup)
+    text = re.sub(r"(?s)<[^>]+>", " ", markup)
+    text = html.unescape(text)
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+    paragraphs = [line for line in lines if line]
+    return "\n\n".join(paragraphs)
+
+
+def epub_title_from_html(text: str, fallback: str) -> str:
+    for line in text.splitlines():
+        value = line.strip()
+        if 3 <= len(value) <= 100:
+            return value
+    return fallback
+
+
+def read_epub(source: Path) -> dict:
+    metadata = book_metadata(source)
+    with zipfile.ZipFile(source) as archive:
+        container = ET.fromstring(archive.read("META-INF/container.xml"))
+        container_ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
+        rootfile = container.find(".//c:rootfile", container_ns).attrib["full-path"]
+        root_dir = Path(rootfile).parent
+        opf = ET.fromstring(archive.read(rootfile))
+        ns = {"opf": "http://www.idpf.org/2007/opf", "dc": "http://purl.org/dc/elements/1.1/"}
+
+        title_values = [node.text.strip() for node in opf.findall(".//dc:title", ns) if node.text and node.text.strip()]
+        creator_values = [node.text.strip() for node in opf.findall(".//dc:creator", ns) if node.text and node.text.strip()]
+        if title_values:
+            metadata["title"] = title_values[0]
+        if creator_values:
+            metadata["author"] = creator_values[0]
+
+        manifest = {
+            item.attrib.get("id"): item.attrib
+            for item in opf.findall(".//opf:manifest/opf:item", ns)
+            if item.attrib.get("id")
+        }
+        spine = [item.attrib.get("idref") for item in opf.findall(".//opf:spine/opf:itemref", ns)]
+
+        chapters = []
+        current_section = "Front Matter"
+        for idref in spine:
+            item = manifest.get(idref)
+            if not item or item.get("media-type") != "application/xhtml+xml":
+                continue
+            href = unquote(item.get("href", ""))
+            if not href:
+                continue
+            file_path = str((root_dir / href).as_posix())
+            if file_path not in archive.namelist():
+                continue
+            text = epub_text_from_html(archive.read(file_path).decode("utf-8", "ignore"))
+            if len(text) < 80:
+                continue
+            fallback = Path(href).stem
+            title = epub_title_from_html(text, fallback)
+            if re.match(r"^(Part|Chapter|\d+[:.\s-])", title, re.IGNORECASE):
+                current_section = title if title.lower().startswith("part ") else current_section
+            chapters.append({
+                "id": str(len(chapters) + 1),
+                "section": current_section,
+                "title": title,
+                "content": text,
+                "startPage": len(chapters) + 1,
+            })
+
+    return {
+        **metadata,
+        "sourceFile": source.name,
+        "sourceType": "epub",
+        "pageCount": len(chapters),
+        "visionOcrPageCount": 0,
+        "chapters": chapters,
+    }
+
+
 def extract_book(source: Path) -> dict:
+    if source.suffix.lower() == ".epub":
+        return read_epub(source)
+
     metadata = book_metadata(source)
     raw_pages = read_pdf_pages(source, prefer_pypdf=metadata["id"] == "city-of-god")
     cache_dir = ROOT / "data" / "vision-ocr" / metadata["id"]
@@ -290,6 +379,7 @@ def extract_book(source: Path) -> dict:
     return {
         **metadata,
         "sourceFile": source.name,
+        "sourceType": "pdf",
         "pageCount": len(pages),
         "visionOcrPageCount": vision_page_count,
         "chapters": chapters,
@@ -297,7 +387,10 @@ def extract_book(source: Path) -> dict:
 
 
 def main() -> None:
-    sources = sorted((ROOT / "books").glob("*.pdf"), key=lambda path: path.name)
+    sources = sorted(
+        [*list((ROOT / "books").glob("*.pdf")), *list((ROOT / "books").glob("*.epub"))],
+        key=lambda path: path.name,
+    )
     payload = {"books": [extract_book(source) for source in sources]}
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")

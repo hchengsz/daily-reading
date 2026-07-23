@@ -30,7 +30,7 @@ export default function BookScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.author}>{book.author}</Text>
-            <Text style={styles.summary}>共 {book.chapters.length} 个章节节点，来源于 {book.pageCount} 页 PDF</Text>
+            <Text style={styles.summary}>共 {book.chapters.length} 个阅读段，来源于 {book.sourceType === 'epub' ? 'EPUB' : `${book.pageCount} 页 PDF`}</Text>
           </View>
         }
         renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { apiUrl, readJsonResponse } from '@/lib/api-client';
+
 const clientCache = new Map<string, string>();
 
 type SummaryState =
@@ -26,16 +28,14 @@ export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterI
     setState({ status: 'loading' });
 
     try {
-      const response = await fetch('/api/chapter-summary', {
+      const response = await fetch(apiUrl('/api/chapter-summary'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookId, chapterId, force }),
         signal: controller.signal,
       });
-      const data = await response.json() as { summary?: string; source?: 'cache' | 'gemini'; error?: string };
-      if (!response.ok || !data.summary) {
-        throw new Error(data.error || `请求失败（${response.status}）`);
-      }
+      const data = await readJsonResponse<{ summary?: string; source?: 'cache' | 'gemini'; error?: string }>(response);
+      if (!data.summary) throw new Error('总结接口没有返回正文');
       clientCache.set(cacheKey, data.summary);
       setState({ status: 'success', summary: data.summary, source: data.source });
     } catch (error) {

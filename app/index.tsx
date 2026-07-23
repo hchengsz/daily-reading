@@ -52,7 +52,7 @@ export default function LibraryScreen() {
             <View style={styles.details}>
               <Text style={styles.title}>{book.title}</Text>
               <Text style={styles.author}>{book.author}</Text>
-              <Text style={styles.meta}>{book.chapters.length} 章 · {book.pageCount} 页</Text>
+              <Text style={styles.meta}>{book.chapters.length} 段 · {book.sourceType === 'epub' ? 'EPUB' : `${book.pageCount} 页`}</Text>
               <View style={styles.continueButton}>
                 <Text style={styles.continueText}>开始阅读</Text>
                 <Image source="sf:chevron.right" style={styles.chevron} tintColor="#F9F4E8" />
@@ -77,7 +77,7 @@ export default function LibraryScreen() {
 
       <View style={styles.note}>
         <Text style={styles.noteTitle}>离线可读</Text>
-        <Text style={styles.noteText}>你可以从手机选择 PDF 添加到本地书库；AI 总结和 OCR 校正文会继续保存到本地缓存。</Text>
+        <Text style={styles.noteText}>你可以从手机选择 PDF 或 EPUB 添加到本地书库；AI 总结和 OCR 校正文会继续保存到本地缓存。</Text>
         {hiddenBookIds.length > 0 && (
           <Pressable onPress={restoreAllBooks} style={styles.restoreButton}>
             <Text style={styles.restoreText}>恢复已删除书籍（{hiddenBookIds.length}）</Text>
