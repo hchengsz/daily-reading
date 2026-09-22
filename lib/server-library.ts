@@ -1,30 +1,37 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { readStoredFile, writeStoredFile } from '@/lib/server-storage';
 
-import { Book, Library, getBookFrom, getChapterFrom } from '@/lib/book';
+import type { Book, Library } from '@/lib/book';
 
-const libraryPath = path.join(process.cwd(), 'data', 'library.json');
+import { libraryPath } from '@/lib/server-paths';
 
 export async function readLibrary(): Promise<Library> {
-  const text = await readFile(libraryPath, 'utf-8');
+  const text = (await readStoredFile(libraryPath)).toString('utf8');
   const library = JSON.parse(text) as Library;
   if (!Array.isArray(library.books)) throw new Error('书库格式无效');
   return library;
 }
 
 export async function writeLibrary(library: Library) {
-  await writeFile(libraryPath, JSON.stringify(library, null, 0), 'utf-8');
+  await writeStoredFile(libraryPath, JSON.stringify(library, null, 0));
 }
 
 export function getServerBook(library: Library, bookId: string) {
-  return getBookFrom(library, bookId);
+  return library.books.find((book) => book.id === bookId);
 }
 
 export function getServerChapter(library: Library, bookId: string, chapterId: string) {
-  return getChapterFrom(library, bookId, chapterId);
+  return getServerBook(library, bookId)?.chapters.find((chapter) => chapter.id === chapterId);
 }
 
-export async function upsertBook(book: Book) {
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+export function upsertBook(book: Book): Promise<Library> {
+  const result = writeQueue.then(() => updateBook(book));
+  writeQueue = result.catch(() => undefined);
+  return result;
+}
+
+async function updateBook(book: Book) {
   const library = await readLibrary();
   const books = library.books.filter((item) => item.id !== book.id && item.sourceFile !== book.sourceFile);
   books.push(book);

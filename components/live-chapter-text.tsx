@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { apiUrl, readJsonResponse } from '@/lib/api-client';
+import { apiFetch, readJsonResponse } from '@/lib/api-client';
 
 type LiveStatus = 'disabled' | 'idle' | 'loading' | 'ready' | 'failed';
 
@@ -62,7 +62,7 @@ export function LiveChapterText({
       setMessage('');
 
       try {
-        const response = await fetch(apiUrl('/api/chapter-content'), {
+        const response = await apiFetch('/api/chapter-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookId, chapterId, force: request.force }),

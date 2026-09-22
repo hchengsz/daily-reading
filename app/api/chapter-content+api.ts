@@ -1,10 +1,11 @@
+import { readCachedText, writeCachedText, readStoredFile } from '@/lib/server-storage';
 import { Buffer } from 'node:buffer';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { getServerBook, getServerChapter, readLibrary } from '@/lib/server-library';
 import { PDFDocument } from 'pdf-lib';
 import { fetch as serverFetch, ProxyAgent } from 'undici';
+import { aiCacheRoot, booksDir } from '@/lib/server-paths';
 
 type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -21,7 +22,6 @@ const MAX_CHAPTER_PAGES = 40;
 const BATCH_SIZE = 4;
 
 const contentCache = new Map<string, Promise<GeneratedContent>>();
-const aiCacheRoot = path.join(process.cwd(), 'data', 'ai-cache');
 const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
@@ -86,8 +86,8 @@ async function generateCorrectedContent(bookId: string, chapterId: string) {
   if (!bookRecord || !isAiOcrEnabled(bookRecord)) throw new Error('这本书不需要实时校正文');
 
   const { book, chapter, startPage, endPage } = getChapterPagesFromLibrary(library, bookId, chapterId);
-  const pdfPath = path.join(process.cwd(), 'books', book.sourceFile);
-  const sourceBytes = await readFile(pdfPath);
+  const pdfPath = path.join(booksDir, book.sourceFile);
+  const sourceBytes = await readStoredFile(pdfPath);
   const sourceDocument = await PDFDocument.load(sourceBytes);
 
   const pages: GeminiPage[] = [];
@@ -121,21 +121,6 @@ function getCacheFile(kind: 'ocr', bookId: string, chapterId: string) {
 
 function safePathPart(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-async function readCachedText(filePath: string) {
-  try {
-    const text = await readFile(filePath, 'utf-8');
-    return text.trim();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
-    throw error;
-  }
-}
-
-async function writeCachedText(filePath: string, text: string) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, text, 'utf-8');
 }
 
 async function extractPdfPages(sourceDocument: PDFDocument, startPage: number, endPage: number) {

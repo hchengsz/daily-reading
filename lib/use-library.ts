@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { apiUrl, readJsonResponse } from '@/lib/api-client';
+import { apiFetch, readJsonResponse } from '@/lib/api-client';
 import { fallbackLibrary, Library } from '@/lib/book';
 
 type LibraryState = {
@@ -20,7 +20,7 @@ export function useLibrary(): LibraryState {
     setError('');
 
     try {
-      const response = await fetch(apiUrl('/api/library'));
+      const response = await apiFetch('/api/library');
       const latest = await readJsonResponse<Library>(response);
       if (!Array.isArray(latest.books)) throw new Error('书库格式无效');
       setLibrary(latest);

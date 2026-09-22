@@ -4,11 +4,12 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { hideBook, restoreAllBooks, useHiddenBooks } from '@/lib/library-storage';
 import { useLibrary } from '@/lib/use-library';
+import { BackendAccess } from '@/components/backend-access';
 
 const coverColors = ['#8B3A2F', '#315C56', '#6A4B73', '#7A5A31', '#3D5875', '#73524A'];
 
 export default function LibraryScreen() {
-  const { library, loading, error } = useLibrary();
+  const { library, loading, error, reload } = useLibrary();
   const hiddenBookIds = useHiddenBooks();
   const visibleBooks = library.books.filter((book) => !hiddenBookIds.includes(book.id));
 
@@ -27,6 +28,7 @@ export default function LibraryScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
       <Text style={styles.eyebrow}>我的藏书</Text>
       <Text style={styles.heading}>安静地读一会儿</Text>
+      <BackendAccess onConnected={reload} />
       <Pressable
         accessibilityRole="button"
         onPress={() => router.push('/add-book' as never)}

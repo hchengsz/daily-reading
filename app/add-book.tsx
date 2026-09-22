@@ -3,7 +3,7 @@ import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { apiUrl, readJsonResponse } from '@/lib/api-client';
+import { apiFetch, readJsonResponse } from '@/lib/api-client';
 
 type ProcessingMode = 'scg' | 'generic';
 
@@ -72,7 +72,7 @@ export default function AddBookScreen() {
       form.append('translator', translator.trim());
       form.append('mode', mode);
 
-      const response = await fetch(apiUrl('/api/add-book'), {
+      const response = await apiFetch('/api/add-book', {
         method: 'POST',
         body: form,
       });
@@ -98,7 +98,7 @@ export default function AddBookScreen() {
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>本地图书入库</Text>
           <Text style={styles.heading}>选择一本书，然后决定怎么切分</Text>
-          <Text style={styles.note}>添加后文件会保存到项目的 books 文件夹，正文会写入 data/library.json。</Text>
+          <Text style={styles.note}>选择不超过 50MB 的文件，上传后提取正文并保存到书库。</Text>
         </View>
 
         <Pressable

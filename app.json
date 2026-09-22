@@ -2,6 +2,7 @@
   "expo": {
     "name": "daily-reading",
     "slug": "daily-reading",
+    "owner": "hchengcs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,6 +10,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.hchengcs.dailyreading",
       "supportsTablet": true
     },
     "android": {
@@ -43,6 +45,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fefa1986-fe9a-4787-9de1-ec563af12f78"
+      }
     }
   }
 }

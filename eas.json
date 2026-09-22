@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "testflight": {
+      "distribution": "store",
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_BETA_ACCESS_REQUIRED": "true"
+      },
+      "autoIncrement": true,
+      "ios": {
+        "simulator": false
+      }
+    }
+  },
+  "submit": {
+    "testflight": {}
+  }
+}

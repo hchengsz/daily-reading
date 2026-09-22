@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { apiUrl, readJsonResponse } from '@/lib/api-client';
+import { apiFetch, readJsonResponse } from '@/lib/api-client';
 
 const clientCache = new Map<string, string>();
 
@@ -28,7 +28,7 @@ export function ChapterSummary({ bookId, chapterId }: { bookId: string; chapterI
     setState({ status: 'loading' });
 
     try {
-      const response = await fetch(apiUrl('/api/chapter-summary'), {
+      const response = await apiFetch('/api/chapter-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookId, chapterId, force }),

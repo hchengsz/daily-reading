@@ -1,6 +1,16 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+// A private TestFlight access code stays in memory, never in the app bundle or source files.
+let betaAccessToken = '';
+export function setBetaAccessToken(token: string) { betaAccessToken = token.trim(); }
+export function apiFetch(path: string, options: RequestInit = {}) {
+  if (!path.startsWith('/api/')) throw new Error('无效的 API 路径');
+  const headers = new Headers(options.headers);
+  if (betaAccessToken) headers.set('Authorization', `Bearer ${betaAccessToken}`);
+  return fetch(apiUrl(path), { ...options, headers });
+}
+
 export function apiUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
   if (Platform.OS === 'web') return path;

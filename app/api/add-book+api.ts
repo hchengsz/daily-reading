@@ -1,11 +1,12 @@
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { createBookFromEpub, createBookFromPdf, sanitizeFileName, slugifyBookId, AddBookMode } from '@/lib/server-pdf-books';
-import { readLibrary, upsertBook } from '@/lib/server-library';
+import { upsertBook } from '@/lib/server-library';
 
-const booksDir = path.join(process.cwd(), 'books');
-const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+import { booksDir } from '@/lib/server-paths';
+import { writeStoredFile } from '@/lib/server-storage';
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -23,10 +24,10 @@ export async function POST(request: Request) {
       return Response.json({ error: '处理模式无效' }, { status: 400 });
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      return Response.json({ error: '文件不能超过 80MB' }, { status: 400 });
+      return Response.json({ error: '文件不能超过 50MB' }, { status: 400 });
     }
 
-    const sourceFile = await uniqueSourceFile(sanitizeFileName(file.name || 'book.pdf'));
+    const sourceFile = `${randomUUID()}-${sanitizeFileName(file.name || 'book.pdf')}`;
     const isEpub = sourceFile.toLowerCase().endsWith('.epub');
     const isPdf = sourceFile.toLowerCase().endsWith('.pdf');
     if (!isPdf && !isEpub) {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
 
     const bookTitle = stringValue(title) || sourceFile.replace(/\.(pdf|epub)$/i, '');
     const baseBookInput = {
-      id: await uniqueBookId(slugifyBookId(bookTitle)),
+      id: `${slugifyBookId(bookTitle)}-${randomUUID()}`,
       title: bookTitle,
       author: stringValue(author) || '未知作者',
       translator: stringValue(translator),
@@ -51,8 +52,7 @@ export async function POST(request: Request) {
       return Response.json({ error: '没有从文件中提取到可用正文' }, { status: 422 });
     }
 
-    await mkdir(booksDir, { recursive: true });
-    await writeFile(path.join(booksDir, sourceFile), bytes);
+    await writeStoredFile(path.join(booksDir, sourceFile), bytes);
 
     const library = await upsertBook(book);
     return Response.json({ book, library });
@@ -64,39 +64,4 @@ export async function POST(request: Request) {
 
 function stringValue(value: FormDataEntryValue | null) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-async function uniqueSourceFile(fileName: string) {
-  const library = await readLibrary();
-  const existing = new Set(library.books.map((book) => book.sourceFile));
-  if (!existing.has(fileName) && !(await fileExists(path.join(booksDir, fileName)))) return fileName;
-
-  const extension = path.extname(fileName) || '.pdf';
-  const stem = path.basename(fileName, extension);
-  for (let index = 2; index < 1000; index += 1) {
-    const candidate = `${stem}-${index}${extension}`;
-    if (!existing.has(candidate) && !(await fileExists(path.join(booksDir, candidate)))) return candidate;
-  }
-  return `${stem}-${Date.now()}${extension}`;
-}
-
-async function fileExists(fileName: string) {
-  try {
-    await access(fileName);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function uniqueBookId(id: string) {
-  const library = await readLibrary();
-  const existing = new Set(library.books.map((book) => book.id));
-  if (!existing.has(id)) return id;
-
-  for (let index = 2; index < 1000; index += 1) {
-    const candidate = `${id}-${index}`;
-    if (!existing.has(candidate)) return candidate;
-  }
-  return `${id}-${Date.now()}`;
 }

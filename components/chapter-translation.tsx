@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { apiUrl, readJsonResponse } from '@/lib/api-client';
+import { apiFetch, readJsonResponse } from '@/lib/api-client';
 
 type TranslationProvider = 'google' | 'ai';
 
@@ -23,7 +23,7 @@ export function ChapterTranslation({
   chapterId: string;
   enabled: boolean;
 }) {
-  const cacheKey = `${bookId}:${chapterId}`;
+  const cacheKey = `catholic-v1:${bookId}:${chapterId}`;
   const controllerRef = useRef<AbortController | null>(null);
   const [state, setState] = useState<TranslationState>({ status: 'idle' });
 
@@ -47,7 +47,7 @@ export function ChapterTranslation({
     setState({ status: 'loading', provider });
 
     try {
-      const response = await fetch(apiUrl('/api/chapter-translation'), {
+      const response = await apiFetch('/api/chapter-translation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookId, chapterId, provider, force }),
@@ -75,7 +75,7 @@ export function ChapterTranslation({
         <View style={styles.badge}><Text style={styles.badgeText}>译</Text></View>
         <View style={styles.headingText}>
           <Text style={styles.title}>本章中文翻译</Text>
-          <Text style={styles.subtitle}>英文图书可手动调用 Google 翻译或 AI 翻译</Text>
+          <Text style={styles.subtitle}>英文译为简体中文 · AI 翻译采用天主教译法</Text>
         </View>
       </View>
 
@@ -92,12 +92,12 @@ export function ChapterTranslation({
           disabled={state.status === 'loading'}
           onPress={() => translate('ai')}
           style={StyleSheet.flatten([styles.primaryButton, styles.aiButton, state.status === 'loading' ? styles.disabledButton : undefined])}>
-          <Text style={styles.primaryText}>AI翻译</Text>
+          <Text style={styles.primaryText}>AI 翻译（天主教译法）</Text>
         </Pressable>
       </View>
 
       {state.status === 'idle' && (
-        <Text style={styles.idleText}>AI 翻译会保存到本地缓存；下次点击会优先读取本地文件，避免重复消耗 token。</Text>
+        <Text style={styles.idleText}>AI 翻译使用“天主”“圣神”“恩宠”等天主教术语。译文会保存到服务端本地缓存，再次点击可复用，避免重复消耗 token。</Text>
       )}
       {state.status === 'loading' && (
         <View style={styles.loading}>

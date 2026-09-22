@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readCachedText, writeCachedText } from '@/lib/server-storage';
 import path from 'node:path';
 
 import { getServerChapter, readLibrary } from '@/lib/server-library';
 import { fetch as serverFetch, ProxyAgent } from 'undici';
+import { aiCacheRoot } from '@/lib/server-paths';
 
 type GeminiResponse = {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -10,7 +11,6 @@ type GeminiResponse = {
 };
 
 const summaryCache = new Map<string, Promise<GeneratedSummary>>();
-const aiCacheRoot = path.join(process.cwd(), 'data', 'ai-cache');
 const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
 const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
@@ -103,21 +103,6 @@ function getCacheFile(kind: 'summaries', bookId: string, chapterId: string) {
 
 function safePathPart(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-async function readCachedText(filePath: string) {
-  try {
-    const text = await readFile(filePath, 'utf-8');
-    return text.trim();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
-    throw error;
-  }
-}
-
-async function writeCachedText(filePath: string, text: string) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, text, 'utf-8');
 }
 
 export async function POST(request: Request) {
