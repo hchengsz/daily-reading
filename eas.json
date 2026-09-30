@@ -6,6 +6,7 @@
     "testflight": {
       "distribution": "store",
       "environment": "production",
+      "node": "24.14.1",
       "env": {
         "EXPO_PUBLIC_BETA_ACCESS_REQUIRED": "true"
       },
@@ -16,6 +17,10 @@
     }
   },
   "submit": {
-    "testflight": {}
+    "testflight": {
+      "ios": {
+        "ascAppId": "6814803760"
+      }
+    }
   }
 }
