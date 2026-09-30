@@ -8,7 +8,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "dailyreading",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.hchengcs.dailyreading",
       "supportsTablet": true
@@ -34,7 +33,11 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

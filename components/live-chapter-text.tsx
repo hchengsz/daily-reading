@@ -45,13 +45,6 @@ export function LiveChapterText({
   );
 
   useEffect(() => {
-    setDisplayText(cachedText || content);
-    setStatus(enabled ? (cachedText ? 'ready' : 'idle') : 'disabled');
-    setSource(cachedText ? 'cache' : undefined);
-    setMessage('');
-  }, [cacheKey, cachedText, content, enabled]);
-
-  useEffect(() => {
     if (!enabled || (cachedText && !request.force) || request.count === 0) return;
 
     const controller = new AbortController();

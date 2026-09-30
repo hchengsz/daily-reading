@@ -6,6 +6,8 @@ node_modules/
 
 # Expo
 .expo/
+.expo-home/
+.npm-cache/
 dist/
 web-build/
 tmp/ios-export-check/

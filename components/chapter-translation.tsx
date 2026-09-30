@@ -27,10 +27,7 @@ export function ChapterTranslation({
   const controllerRef = useRef<AbortController | null>(null);
   const [state, setState] = useState<TranslationState>({ status: 'idle' });
 
-  useEffect(() => {
-    setState({ status: 'idle' });
-    return () => controllerRef.current?.abort();
-  }, [cacheKey]);
+  useEffect(() => () => controllerRef.current?.abort(), [cacheKey]);
 
   if (!enabled) return null;
 
