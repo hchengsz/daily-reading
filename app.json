@@ -10,6 +10,9 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.hchengcs.dailyreading",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "supportsTablet": true
     },
     "android": {

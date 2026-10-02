@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { File as ExpoFile } from 'expo-file-system';
 import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -160,11 +161,8 @@ function appendBookFile(form: FormData, bookFile: PickedBookFile) {
     return;
   }
 
-  form.append('file', {
-    uri: bookFile.uri,
-    name: bookFile.name,
-    type: bookFile.mimeType || (bookFile.name.toLowerCase().endsWith('.epub') ? 'application/epub+zip' : 'application/pdf'),
-  } as unknown as Blob);
+  const localFile = new ExpoFile(bookFile.uri);
+  form.append('file', localFile, bookFile.name);
 }
 
 const styles = StyleSheet.create({

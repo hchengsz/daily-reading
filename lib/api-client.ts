@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { fetch as expoFetch } from 'expo/fetch';
 import { Platform } from 'react-native';
 
 // A private TestFlight access code stays in memory, never in the app bundle or source files.
@@ -8,7 +9,7 @@ export function apiFetch(path: string, options: RequestInit = {}) {
   if (!path.startsWith('/api/')) throw new Error('无效的 API 路径');
   const headers = new Headers(options.headers);
   if (betaAccessToken) headers.set('Authorization', `Bearer ${betaAccessToken}`);
-  return fetch(apiUrl(path), { ...options, headers });
+  return expoFetch(apiUrl(path), { ...options, headers });
 }
 
 export function apiUrl(path: string) {
