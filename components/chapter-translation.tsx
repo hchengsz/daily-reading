@@ -3,16 +3,13 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { apiFetch, readJsonResponse } from '@/lib/api-client';
 
-type TranslationProvider = 'google' | 'ai';
-
 type TranslationState =
   | { status: 'idle' }
-  | { status: 'loading'; provider: TranslationProvider }
-  | { status: 'success'; translation: string; provider: TranslationProvider; source?: 'cache' | 'gemini' | 'google' }
-  | { status: 'error'; message: string; provider?: TranslationProvider };
+  | { status: 'loading' }
+  | { status: 'success'; translation: string; source?: 'cache' | 'gemini' }
+  | { status: 'error'; message: string };
 
 const aiTranslationCache = new Map<string, string>();
-const googleTranslationCache = new Map<string, string>();
 
 export function ChapterTranslation({
   bookId,
@@ -31,38 +28,38 @@ export function ChapterTranslation({
 
   if (!enabled) return null;
 
-  async function translate(provider: TranslationProvider, force = false) {
-    const cached = provider === 'ai' ? aiTranslationCache.get(cacheKey) : googleTranslationCache.get(cacheKey);
+  async function translate(force = false) {
+    const cached = aiTranslationCache.get(cacheKey);
     if (cached && !force) {
-      setState({ status: 'success', translation: cached, provider, source: provider === 'ai' ? 'cache' : 'google' });
+      setState({ status: 'success', translation: cached, source: 'cache' });
       return;
     }
 
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setState({ status: 'loading', provider });
+    setState({ status: 'loading' });
 
     try {
       const response = await apiFetch('/api/chapter-translation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId, chapterId, provider, force }),
+        body: JSON.stringify({ bookId, chapterId, force }),
         signal: controller.signal,
       });
       const data = await readJsonResponse<{
         translation?: string;
-        source?: 'cache' | 'gemini' | 'google';
+        source?: 'cache' | 'gemini';
         error?: string;
       }>(response);
       if (!data.translation) throw new Error('翻译接口没有返回正文');
 
-      if (provider === 'ai') aiTranslationCache.set(cacheKey, data.translation);
-      if (provider === 'google') googleTranslationCache.set(cacheKey, data.translation);
-      setState({ status: 'success', translation: data.translation, provider, source: data.source });
+      if (controller.signal.aborted) return;
+      aiTranslationCache.set(cacheKey, data.translation);
+      setState({ status: 'success', translation: data.translation, source: data.source });
     } catch (error) {
       if (controller.signal.aborted) return;
-      setState({ status: 'error', message: error instanceof Error ? error.message : '翻译失败', provider });
+      setState({ status: 'error', message: error instanceof Error ? error.message : '翻译失败' });
     }
   }
 
@@ -80,16 +77,9 @@ export function ChapterTranslation({
         <Pressable
           accessibilityRole="button"
           disabled={state.status === 'loading'}
-          onPress={() => translate('google')}
-          style={StyleSheet.flatten([styles.primaryButton, state.status === 'loading' ? styles.disabledButton : undefined])}>
-          <Text style={styles.primaryText}>谷歌翻译</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          disabled={state.status === 'loading'}
-          onPress={() => translate('ai')}
+          onPress={() => translate()}
           style={StyleSheet.flatten([styles.primaryButton, styles.aiButton, state.status === 'loading' ? styles.disabledButton : undefined])}>
-          <Text style={styles.primaryText}>AI 翻译（天主教译法）</Text>
+          <Text style={styles.primaryText}>Gemini 翻译（天主教译法）</Text>
         </Pressable>
       </View>
 
@@ -99,7 +89,7 @@ export function ChapterTranslation({
       {state.status === 'loading' && (
         <View style={styles.loading}>
           <ActivityIndicator color="#8B3A2F" />
-          <Text style={styles.loadingText}>{state.provider === 'google' ? '正在调用 Google 翻译…' : '正在调用 AI 翻译…'}</Text>
+          <Text style={styles.loadingText}>正在调用 Gemini 翻译…</Text>
         </View>
       )}
       {state.status === 'success' && (
@@ -108,19 +98,16 @@ export function ChapterTranslation({
           <Text style={styles.cacheHint}>
             {state.source === 'cache' && 'AI 翻译已从本地缓存读取'}
             {state.source === 'gemini' && 'AI 翻译已生成并保存到本地缓存'}
-            {state.source === 'google' && '当前显示 Google 翻译结果'}
           </Text>
-          {state.provider === 'ai' && (
-            <Pressable style={styles.secondaryButton} onPress={() => translate('ai', true)}>
-              <Text style={styles.secondaryText}>重新AI翻译（会消耗 token）</Text>
-            </Pressable>
-          )}
+          <Pressable style={styles.secondaryButton} onPress={() => translate(true)}>
+            <Text style={styles.secondaryText}>重新 AI 翻译（会消耗 token）</Text>
+          </Pressable>
         </View>
       )}
       {state.status === 'error' && (
         <View style={styles.errorBox}>
           <Text selectable style={styles.errorText}>{state.message}</Text>
-          <Pressable style={styles.secondaryButton} onPress={() => translate(state.provider || 'ai', true)}>
+          <Pressable style={styles.secondaryButton} onPress={() => translate(true)}>
             <Text style={styles.secondaryText}>重试</Text>
           </Pressable>
         </View>

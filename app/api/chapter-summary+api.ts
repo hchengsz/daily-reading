@@ -2,30 +2,23 @@ import { readCachedText, writeCachedText } from '@/lib/server-storage';
 import path from 'node:path';
 
 import { getServerChapter, readLibrary } from '@/lib/server-library';
-import { fetch as serverFetch, ProxyAgent } from 'undici';
+import { GeminiError, getGeminiCredentials, requestGemini, type GeminiCredentials } from '@/lib/server-gemini';
 import { aiCacheRoot } from '@/lib/server-paths';
 
-type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
-  error?: { message?: string };
-};
-
 const summaryCache = new Map<string, Promise<GeneratedSummary>>();
-const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
 type GeneratedSummary = {
   summary: string;
   source: 'cache' | 'gemini';
 };
 
-function summarizeChapter(bookId: string, chapterId: string, force = false) {
-  const cacheKey = `${bookId}:${chapterId}`;
+function summarizeChapter(bookId: string, chapterId: string, credentials: GeminiCredentials, force = false) {
+  const cacheKey = `${credentials.cacheScope}:${bookId}:${chapterId}`;
   if (force) summaryCache.delete(cacheKey);
   const cached = summaryCache.get(cacheKey);
   if (cached) return cached;
 
-  const request = getOrGenerateSummary(bookId, chapterId, force).catch((error) => {
+  const request = getOrGenerateSummary(bookId, chapterId, credentials, force).catch((error) => {
     summaryCache.delete(cacheKey);
     throw error;
   });
@@ -33,38 +26,25 @@ function summarizeChapter(bookId: string, chapterId: string, force = false) {
   return request;
 }
 
-async function getOrGenerateSummary(bookId: string, chapterId: string, force: boolean): Promise<GeneratedSummary> {
+async function getOrGenerateSummary(bookId: string, chapterId: string, credentials: GeminiCredentials, force: boolean): Promise<GeneratedSummary> {
   const cacheFile = getCacheFile('summaries', bookId, chapterId);
   if (!force) {
     const cached = await readCachedText(cacheFile);
     if (cached) return { summary: cached, source: 'cache' };
   }
 
-  const summary = await generateSummary(bookId, chapterId);
+  const summary = await generateSummary(bookId, chapterId, credentials);
   await writeCachedText(cacheFile, summary);
   return { summary, source: 'gemini' };
 }
 
-async function generateSummary(bookId: string, chapterId: string) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const configuredModel = process.env.GEMINI_VOCAB_MODEL;
+async function generateSummary(bookId: string, chapterId: string, credentials: GeminiCredentials) {
   const library = await readLibrary();
   const chapter = getServerChapter(library, bookId, chapterId);
 
-  if (!apiKey) throw new Error('服务端缺少 GEMINI_API_KEY');
-  if (!configuredModel) throw new Error('服务端缺少 GEMINI_VOCAB_MODEL');
   if (!chapter) throw new Error('没有找到这一章');
 
-  const model = configuredModel.replace(/^models\//, '');
-  const response = await serverFetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
+  const data = await requestGemini(credentials, {
         systemInstruction: {
           parts: [{
             text: '你是一位严谨的经典哲学导读编辑。只能依据提供的章节正文总结，不得补写正文没有表达的观点。原文来自旧书OCR，遇到明显错字时结合上下文谨慎理解；无法确定时明确说明。使用简体中文和纯文本，不使用Markdown符号。',
@@ -79,15 +59,7 @@ async function generateSummary(bookId: string, chapterId: string) {
         generationConfig: {
           maxOutputTokens: 8192,
         },
-      }),
-      dispatcher: proxyAgent,
-    },
-  );
-
-  const data = await response.json() as GeminiResponse;
-  if (!response.ok) {
-    throw new Error(data.error?.message || `Gemini 请求失败（${response.status}）`);
-  }
+  });
 
   const summary = data.candidates?.[0]?.content?.parts
     ?.map((part) => part.text || '')
@@ -115,10 +87,10 @@ export async function POST(request: Request) {
     if (!getServerChapter(library, body.bookId, body.chapterId)) {
       return Response.json({ error: '没有找到这一章' }, { status: 404 });
     }
-    const result = await summarizeChapter(body.bookId, body.chapterId, body.force === true);
+    const result = await summarizeChapter(body.bookId, body.chapterId, getGeminiCredentials(request), body.force === true);
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : '生成总结失败';
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: error instanceof GeminiError ? error.status : 500 });
   }
 }

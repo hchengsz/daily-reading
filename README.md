@@ -52,12 +52,7 @@ If a cached summary exists, the app reuses it. If the reader wants a better resu
 
 ### English chapter translation
 
-English reading sections show two manual translation buttons:
-
-- Google Translate
-- AI Translate
-
-Google Translate is useful for a quick machine translation. AI Translate uses Gemini for a more careful translation.
+English reading sections have one manual Gemini translation button, using Catholic terminology.
 
 AI translations are saved here:
 
@@ -139,7 +134,7 @@ The active library is defined by `data/library.json`, not just by the files pres
 
 ## Tech stack
 
-- Expo SDK 54
+- Expo SDK 57
 - Expo Router
 - React Native
 - TypeScript
@@ -217,23 +212,24 @@ This script is for batch OCR workflows and experiments. The app itself uses API 
 
 ## Environment variables
 
-Gemini-powered features require a `.env` file.
+Open **Gemini 设置** on the bookshelf to save, replace, check, or clear a personal Gemini API Key. Native apps use encrypted device storage; web keeps it only in page memory. All three AI features use the saved key. The optional model ID overrides the server default. A connection check reads model metadata without generating content; it does not verify generation quota.
+
+Keys are sent over HTTPS through the app backend to Google Gemini, never saved in the library or cloud configuration. Existing private-library AI caches are shared content, not user-isolated storage. Regeneration explicitly spends a new request on the selected account.
+
+For legacy clients and command-line OCR, server-side defaults remain optional in `.env.local`:
 
 Example:
 
 ```env
 GEMINI_API_KEY=your-api-key
 GEMINI_VOCAB_MODEL=gemini-...
-GOOGLE_TRANSLATE_API_KEY=your-google-translate-key
-GOOGLE_TRANSLATE_BASE_URL=https://translation.googleapis.com/language/translate/v2
-GOOGLE_TRANSLATE_TARGET_LANGUAGE=zh-CN
 HTTP_PROXY=http://127.0.0.1:xxxx
 HTTPS_PROXY=http://127.0.0.1:xxxx
 ```
 
 `HTTP_PROXY` and `HTTPS_PROXY` are optional. They are useful if Gemini requests need to go through a local proxy.
 
-Do not expose Gemini or Google Translate keys through `EXPO_PUBLIC_` variables. The current API routes read server-side environment variables.
+Never expose Gemini keys through `EXPO_PUBLIC_` variables. A personal request key takes precedence over the optional server key and never falls back to it after an authentication failure.
 
 ## Getting started
 
@@ -340,8 +336,8 @@ This warning comes from `undici` when proxy environment variables are enabled. I
 
 Check that:
 
-- `GEMINI_API_KEY` is set
-- `GEMINI_VOCAB_MODEL` is set
+- a Gemini API Key is saved under the bookshelf's Gemini settings
+- the connection check succeeds and the account has generation quota
 - your proxy configuration works, if a proxy is required
 - the dev server was restarted after editing `.env`
 
@@ -349,8 +345,7 @@ Check that:
 
 Check that:
 
-- `GOOGLE_TRANSLATE_API_KEY` is set for Google Translate
-- `GEMINI_API_KEY` and `GEMINI_VOCAB_MODEL` are set for AI Translate
+- a Gemini API Key is saved and the configured model is accessible
 - your proxy configuration works, if a proxy is required
 - the dev server was restarted after editing `.env`
 

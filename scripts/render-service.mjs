@@ -21,11 +21,12 @@ if (service.type !== 'web_service' || service.serviceDetails?.plan !== 'free' ||
   throw new Error('Expected this project’s existing free web service; refusing to change another service or plan.');
 }
 if (mode === 'configure') {
-  const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'BACKEND_ACCESS_TOKEN', 'GEMINI_API_KEY', 'GEMINI_VOCAB_MODEL'];
+  const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'BACKEND_ACCESS_TOKEN'];
   for (const name of required) if (!process.env[name]) throw new Error(`Missing ${name}`);
   if (process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('sb_publishable_')) throw new Error('Supabase requires a server key');
   const values = {
     ...Object.fromEntries(required.map((name) => [name, process.env[name]])),
+    ...Object.fromEntries(['GEMINI_API_KEY', 'GEMINI_VOCAB_MODEL'].filter((name) => process.env[name]).map((name) => [name, process.env[name]])),
     NODE_VERSION: '24.14.1', HOST: '0.0.0.0', STORAGE_PROVIDER: 'supabase',
     SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET || 'daily-reading',
   };

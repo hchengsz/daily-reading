@@ -23,7 +23,5 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: daily-reading
-      - key: GEMINI_API_KEY
-        sync: false
       - key: GEMINI_VOCAB_MODEL
-        sync: false
+        value: gemini-3.8-flash

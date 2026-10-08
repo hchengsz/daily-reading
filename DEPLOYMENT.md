@@ -8,7 +8,8 @@
 - Supabase 私有 Storage 存放书库 JSON、原始图书和 AI 缓存。使用 `STORAGE_PROVIDER=supabase`；不会在云存储错误时回退到 Render 临时磁盘。
 - 目前是一个私人测试书库，使用独立访问码保护全部 API。尚未提供多用户隔离，请勿分发访问码给无关人员。
 - 新上传文件限制 50MB。现有 9 本书均在限制以内。本地迁移预检共 39 个文件，约 145.3MB。
-- 访问码只保存在应用内存，完全关闭应用后需重新输入。Supabase 服务端密钥和 Gemini 密钥绝不能放进 EXPO_PUBLIC_ 或 EAS 移动构建环境。
+- 访问码只保存在应用内存，完全关闭应用后需重新输入。Gemini 设置支持用户 API Key：iPhone 使用 Keychain 加密保存，网页版仅保存在页面内存。请求密钥经 HTTPS 后端转发给 Gemini，不写入云端配置或书库；生成费用属于该密钥账户。Supabase 服务端密钥和 Gemini 密钥绝不能放进 EXPO_PUBLIC_ 或 EAS 移动构建环境。
+- 新客户端要求在书架填写 Gemini API Key。服务端 GEMINI_API_KEY 仅为旧客户端/命令行提供可选兼容；用户密钥优先，不会在失效后回退扣费。GEMINI_VOCAB_MODEL 为可选默认模型，用户可覆盖。部署新客户端前先部署后端 `/api/gemini-check` 及三个支持请求密钥的 AI 接口。
 
 ### 本机配置
 

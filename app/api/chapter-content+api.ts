@@ -4,13 +4,8 @@ import path from 'node:path';
 
 import { getServerBook, getServerChapter, readLibrary } from '@/lib/server-library';
 import { PDFDocument } from 'pdf-lib';
-import { fetch as serverFetch, ProxyAgent } from 'undici';
+import { GeminiError, getGeminiCredentials, requestGemini, type GeminiCredentials } from '@/lib/server-gemini';
 import { aiCacheRoot, booksDir } from '@/lib/server-paths';
-
-type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
-  error?: { message?: string };
-};
 
 type GeminiPage = {
   page: number;
@@ -22,8 +17,6 @@ const MAX_CHAPTER_PAGES = 40;
 const BATCH_SIZE = 4;
 
 const contentCache = new Map<string, Promise<GeneratedContent>>();
-const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
-const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
 type GeneratedContent = {
   content: string;
@@ -49,13 +42,13 @@ function getChapterPagesFromLibrary(library: Awaited<ReturnType<typeof readLibra
   return { book, chapter, startPage, endPage };
 }
 
-function getCorrectedContent(bookId: string, chapterId: string, force = false) {
-  const cacheKey = `${bookId}:${chapterId}`;
+function getCorrectedContent(bookId: string, chapterId: string, credentials: GeminiCredentials, force = false) {
+  const cacheKey = `${credentials.cacheScope}:${bookId}:${chapterId}`;
   if (force) contentCache.delete(cacheKey);
   const cached = contentCache.get(cacheKey);
   if (cached) return cached;
 
-  const request = getOrGenerateCorrectedContent(bookId, chapterId, force).catch((error) => {
+  const request = getOrGenerateCorrectedContent(bookId, chapterId, credentials, force).catch((error) => {
     contentCache.delete(cacheKey);
     throw error;
   });
@@ -63,23 +56,19 @@ function getCorrectedContent(bookId: string, chapterId: string, force = false) {
   return request;
 }
 
-async function getOrGenerateCorrectedContent(bookId: string, chapterId: string, force: boolean): Promise<GeneratedContent> {
+async function getOrGenerateCorrectedContent(bookId: string, chapterId: string, credentials: GeminiCredentials, force: boolean): Promise<GeneratedContent> {
   const cacheFile = getCacheFile('ocr', bookId, chapterId);
   if (!force) {
     const cached = await readCachedText(cacheFile);
     if (cached) return { content: cached, source: 'cache' };
   }
 
-  const content = await generateCorrectedContent(bookId, chapterId);
+  const content = await generateCorrectedContent(bookId, chapterId, credentials);
   await writeCachedText(cacheFile, content);
   return { content, source: 'gemini-vision' };
 }
 
-async function generateCorrectedContent(bookId: string, chapterId: string) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const configuredModel = process.env.GEMINI_VOCAB_MODEL;
-  if (!apiKey) throw new Error('服务端缺少 GEMINI_API_KEY');
-  if (!configuredModel) throw new Error('服务端缺少 GEMINI_VOCAB_MODEL');
+async function generateCorrectedContent(bookId: string, chapterId: string, credentials: GeminiCredentials) {
 
   const library = await readLibrary();
   const bookRecord = getServerBook(library, bookId);
@@ -96,8 +85,8 @@ async function generateCorrectedContent(bookId: string, chapterId: string) {
     const batchEnd = Math.min(endPage, page + BATCH_SIZE - 1);
     const batchBytes = await extractPdfPages(sourceDocument, batchStart, batchEnd);
     pages.push(...await transcribePdfBatch({
-      apiKey,
-      model: configuredModel.replace(/^models\//, ''),
+      apiKey: credentials.apiKey,
+      model: credentials.model,
       title: chapter.title,
       startPage: batchStart,
       endPage: batchEnd,
@@ -190,7 +179,7 @@ async function transcribePdfBatch(input: {
     },
   };
 
-  const data = await requestGemini(input.apiKey, input.model, body);
+  const data = await requestGemini(input, body);
   const rawText = data.candidates?.[0]?.content?.parts
     ?.map((part) => part.text || '')
     .join('')
@@ -223,36 +212,6 @@ function normalizeGeminiPages(pages: GeminiPage[], pageNumbers: number[]) {
     .filter((page): page is GeminiPage => page !== null && pageNumbers.includes(page.page));
 }
 
-async function requestGemini(apiKey: string, model: string, body: unknown) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const waits = [0, 5000, 15000];
-
-  for (let attempt = 0; attempt < waits.length; attempt += 1) {
-    if (waits[attempt]) await sleep(waits[attempt]);
-
-    const response = await serverFetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify(body),
-      dispatcher: proxyAgent,
-    });
-    const data = await response.json() as GeminiResponse;
-    if (response.ok) return data;
-    if (response.status !== 429 || attempt === waits.length - 1) {
-      throw new Error(data.error?.message || `Gemini 请求失败（${response.status}）`);
-    }
-  }
-
-  throw new Error('Gemini 请求失败');
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { bookId?: unknown; chapterId?: unknown; force?: unknown };
@@ -268,11 +227,11 @@ export async function POST(request: Request) {
       return Response.json({ error: '没有找到这一章' }, { status: 404 });
     }
 
-    const result = await getCorrectedContent(body.bookId, body.chapterId, body.force === true);
+    const result = await getCorrectedContent(body.bookId, body.chapterId, getGeminiCredentials(request), body.force === true);
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : '实时校正文失败';
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: error instanceof GeminiError ? error.status : 500 });
   }
 }
 
