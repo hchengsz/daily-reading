@@ -5,7 +5,9 @@ const agent = new MockAgent();
 agent.disableNetConnect();
 setGlobalDispatcher(agent);
 const pool = agent.get('https://generativelanguage.googleapis.com');
-const key = 'test-personal-key-1234567890';
+const key = 'test.personal-key+123/=!:@';
+pool.intercept({ path: '/v1beta/models/gemini-test', method: 'GET', headers: { 'x-goog-api-key': 'invalid' } })
+  .reply(400, { error: { message: 'raw-secret-invalid-key' } }).persist();
 pool.intercept({ path: '/v1beta/models/gemini-test', method: 'GET', headers: { 'x-goog-api-key': key } })
   .reply(200, { supportedGenerationMethods: ['generateContent'] }).persist();
 pool.intercept({ path: '/v1beta/models/gemini-denied', method: 'GET' })

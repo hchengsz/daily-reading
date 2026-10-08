@@ -18,7 +18,7 @@ function load(file, dependencies, dev = false) {
 }
 
 const config = load('lib/gemini-config.ts', {});
-const key = 'test-personal-key-1234567890';
+const key = 'test.personal-key+123/=!:@';
 
 test('Gemini key persists in secure storage across module reload and can be removed', async () => {
   const values = new Map();
@@ -48,13 +48,17 @@ test('Gemini key persists in secure storage across module reload and can be remo
   assert.equal(await load('lib/gemini-settings.ts', dependencies).getGeminiSettings(), null);
 });
 
-test('web settings remain in memory and malformed keys/models are rejected', async () => {
+test('web settings accept nonempty keys without character or length restrictions', async () => {
   const dependencies = { 'expo-secure-store': {}, 'react-native': { Platform: { OS: 'web' } }, './gemini-config': config };
   const storage = load('lib/gemini-settings.ts', dependencies);
   await storage.saveGeminiSettings({ apiKey: key, model: '' });
   assert.equal((await storage.getGeminiSettings()).apiKey, key);
   assert.equal(await load('lib/gemini-settings.ts', dependencies).getGeminiSettings(), null);
-  await assert.rejects(storage.saveGeminiSettings({ apiKey: 'https://invalid', model: '' }));
+  for (const apiKey of ['a', 'https://invalid', 'key.with-dashes+symbols/=!:@', 'x'.repeat(300)]) {
+    await storage.saveGeminiSettings({ apiKey, model: '' });
+    assert.equal((await storage.getGeminiSettings()).apiKey, apiKey);
+  }
+  await assert.rejects(storage.saveGeminiSettings({ apiKey: '   ', model: '' }));
   await assert.rejects(storage.saveGeminiSettings({ apiKey: key, model: '../../invalid' }));
 });
 

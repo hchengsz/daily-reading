@@ -40,7 +40,7 @@ test('personal Gemini key works for check, summary, translation and PDF OCR', as
     });
   });
   const headers = { Authorization: 'Bearer test-access', 'Content-Type': 'application/json' };
-  const personal = { ...headers, 'X-Gemini-Api-Key': 'test-personal-key-1234567890', 'X-Gemini-Model': 'gemini-test' };
+  const personal = { ...headers, 'X-Gemini-Api-Key': 'test.personal-key+123/=!:@', 'X-Gemini-Model': 'gemini-test' };
   const body = { bookId: 'test', chapterId: '1', force: true };
   const post = (route, requestHeaders = personal, data) => fetch(`http://127.0.0.1:${port}/api/${route}`, {
     method: 'POST', headers: requestHeaders, body: data ? JSON.stringify(data) : undefined,

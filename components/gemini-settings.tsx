@@ -85,7 +85,6 @@ export function GeminiSettingsCard() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
-              maxLength={256}
               placeholder={saved ? '已保存（留空保留，输入可替换）' : '粘贴 Gemini API Key'}
               style={{ padding: 12, backgroundColor: '#FFFCF6', borderRadius: 10 }}
             />
